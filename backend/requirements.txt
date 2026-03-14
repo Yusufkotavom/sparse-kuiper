@@ -1,0 +1,16 @@
+fastapi>=0.111.0
+uvicorn>=0.30.1
+pydantic>=2.7.4
+pydantic-settings>=2.3.4
+groq>=0.9.0
+playwright>=1.44.0
+pillow>=10.3.0
+python-dotenv>=1.0.1
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+python-multipart>=0.0.9
+tiktok-uploader>=1.0.5
+google-api-python-client>=2.120.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+requests>=2.31.0

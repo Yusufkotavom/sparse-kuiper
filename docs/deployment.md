@@ -1,0 +1,295 @@
+# Nomad Hub — VPS Deployment Guide
+
+Panduan ini mencakup deployment di Linux VPS (Ubuntu 22.04 recommended).
+
+---
+
+## Prerequisites
+
+- VPS Ubuntu 22.04 LTS (min. 2 CPU, 4 GB RAM)
+- Domain name (opsional tapi disarankan)
+- SSH access
+
+---
+
+## 1. Server Setup
+
+```bash
+# Update packages
+sudo apt update && sudo apt upgrade -y
+
+# Install Python 3.11+
+sudo apt install python3.11 python3.11-venv python3-pip -y
+
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install nodejs -y
+
+# Install nginx
+sudo apt install nginx -y
+
+# Playwright system dependencies
+sudo apt install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 \
+    libgbm1 libasound2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2
+```
+
+---
+
+## 2. Clone & Configure
+
+```bash
+sudo mkdir -p /var/www/nomad-hub
+sudo chown $USER:$USER /var/www/nomad-hub
+
+git clone <your-repo-url> /var/www/nomad-hub
+cd /var/www/nomad-hub
+
+# Setup environment
+cp .env.example .env
+nano .env  # Set GROQ_API_KEY dan variabel lainnya
+```
+
+---
+
+## 3. Backend Setup
+
+```bash
+cd /var/www/nomad-hub
+
+python3.11 -m venv venv
+source venv/bin/activate
+
+pip install -r backend/requirements.txt
+
+# Install Playwright browser
+playwright install chromium
+playwright install-deps
+```
+
+---
+
+## 4. Frontend Build
+
+```bash
+cd /var/www/nomad-hub/frontend
+
+# Set API URL ke domain/IP server
+echo "NEXT_PUBLIC_API_URL=https://your-domain.com/api/v1" > .env.local
+
+npm install
+npm run build
+```
+
+---
+
+## 5. Process Management (systemd)
+
+### Backend Service
+
+```bash
+sudo nano /etc/systemd/system/nomad-backend.service
+```
+
+```ini
+[Unit]
+Description=Nomad Hub FastAPI Backend
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/var/www/nomad-hub
+ExecStart=/var/www/nomad-hub/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+EnvironmentFile=/var/www/nomad-hub/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nomad-backend
+sudo systemctl start nomad-backend
+```
+
+### Frontend Service (Next.js)
+
+```bash
+sudo nano /etc/systemd/system/nomad-frontend.service
+```
+
+```ini
+[Unit]
+Description=Nomad Hub Next.js Frontend
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/var/www/nomad-hub/frontend
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=3
+Environment=PORT=3000
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nomad-frontend
+sudo systemctl start nomad-frontend
+```
+
+---
+
+## 6. Nginx Reverse Proxy
+
+```bash
+sudo nano /etc/nginx/sites-available/nomad-hub
+```
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # Frontend
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Backend API
+    location /api/ {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        client_max_body_size 500M;  # Allow large video uploads
+    }
+
+    # Swagger docs
+    location /docs {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/nomad-hub /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+---
+
+## 7. SSL Certificate (HTTPS)
+
+```bash
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d your-domain.com
+```
+
+---
+
+## 8. Local Network Access (LAN)
+
+Untuk akses dari perangkat lain di jaringan lokal (HP, tablet, PC lain) **tanpa VPS**:
+
+```bash
+# Backend — bind ke semua network interface
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend — expose ke LAN
+# Set API URL ke IP komputer server di frontend/.env.local:
+# NEXT_PUBLIC_API_URL=http://192.168.1.X:8000/api/v1
+
+cd frontend && npm run dev -- --hostname 0.0.0.0 --port 3000
+```
+
+- Cek IP komputer server: `ipconfig` (Windows) atau `ip addr` (Linux)
+- Akses dari device lain: `http://192.168.1.X:3000`
+
+> ⚠️ **Penting:** Jika `NEXT_PUBLIC_API_URL` tidak di-set, frontend akan call `http://localhost:8000` — yang pada device lain menunjuk ke device itu sendiri, bukan server. Selalu set env variable ini.
+
+### Ngrok (akses dari internet untuk demo/testing)
+Jika ingin akses dari luar jaringan (internet) untuk demo cepat, paling stabil gunakan reverse proxy satu pintu lalu expose lewat ngrok.
+
+Pola yang aman dan simpel:
+- Frontend dan Backend tetap jalan lokal (port 3000 dan 8000)
+- Reverse proxy di port 80 mengarahkan:
+  - `/api/v1/*` → `http://127.0.0.1:8000/api/v1/*`
+  - `/` → `http://127.0.0.1:3000/`
+- Ngrok expose port 80 (jadi cukup satu URL publik)
+
+Contoh cepat (ngrok):
+```bash
+ngrok http 80
+```
+
+Jika Anda pakai reverse proxy satu origin seperti ini, set frontend:
+- `NEXT_PUBLIC_API_URL=/api/v1`
+
+---
+
+## 9. Environment Variables Reference
+
+| Variable | Required | Description |
+|---|---|---|
+| `GROQ_API_KEY` | ✅ | Groq API key untuk AI generation |
+| `DATABASE_URL` | ❌ | Default: `sqlite:///./nomad_hub.db` |
+| `YOUTUBE_CLIENT_SECRETS_FILE` | ❌ | Path ke `client_secrets.json` untuk OAuth YouTube |
+| `FACEBOOK_APP_ID` | ❌ | Facebook App ID |
+| `FACEBOOK_APP_SECRET` | ❌ | Facebook App Secret |
+| `FACEBOOK_REDIRECT_URI` | ❌ | OAuth callback URL untuk Facebook |
+
+---
+
+## 10. Database Backup
+
+```bash
+# Backup SQLite database
+cp /var/www/nomad-hub/nomad_hub.db /backups/nomad_hub_$(date +%Y%m%d).db
+
+# Automate dengan cron (daily at 2am)
+echo "0 2 * * * cp /var/www/nomad-hub/nomad_hub.db /backups/nomad_hub_\$(date +\%Y\%m\%d).db" | crontab -
+```
+
+---
+
+## 11. Useful Commands
+
+```bash
+# Check backend status
+sudo systemctl status nomad-backend
+
+# View backend logs
+sudo journalctl -u nomad-backend -f
+
+# Restart setelah code update
+sudo systemctl restart nomad-backend nomad-frontend
+
+# Pull latest dan redeploy
+cd /var/www/nomad-hub
+git pull
+source venv/bin/activate && pip install -r backend/requirements.txt
+cd frontend && npm run build
+sudo systemctl restart nomad-backend nomad-frontend
+```
+
+---
+
+## 12. Storage Requirements
+
+| Data | Estimated Size |
+|---|---|
+| Downloaded videos (per project) | 50MB – 5GB |
+| upload_queue/ | Up to 10GB+ |
+| KDP projects (images + PDF) | 100MB – 2GB |
+| nomad_hub.db | < 10MB |
+
+Pastikan VPS memiliki minimal **50GB** disk space.

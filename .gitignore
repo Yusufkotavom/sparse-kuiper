@@ -1,0 +1,93 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Configuration & Secrets
+config.json
+prompts.json
+*.key
+
+# Streamlit
+.streamlit/
+*.webm
+
+# Playwright
+test-results/
+
+# Chrome / Playwright profiles (local runtime data)
+chrome_profile/
+global_profiles/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Outputs & Temporary Files
+# Un-comment the line below if you want to ignore all generated images and PDFs
+# projects/
+*.log
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# video_projects
+video_projects/
+*.mp4
+*.json
+*.png
+
+
+
+# Monorepo tool caches
+.cache/
+.turbo/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Runtime artifacts
+upload_queue/
+sessions/
+data/
+data/upload_jobs/
+backend/data/upload_jobs/
+
+# Legacy / local tool bundles (not part of main app runtime)
+services/
+
+# Archive artifacts (generated metadata, old project outputs)
+archive/
+*.meta.json
+
+# Logs
+*.out
+*.err
+
+# Cloudflare Tunnel local config (avoid committing host-specific paths)
+cloudflared.yml
+

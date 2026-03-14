@@ -1,0 +1,47 @@
+services:
+  # Backend Service (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sparse-kuiper-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/kuiper.db:/app/kuiper.db
+      - ./backend/config:/app/config
+      - ./backend/logs:/app/logs
+      # Direktori data di petakan langsung ke folder lokal agar mudah di cek
+      - ./projects:/app/projects
+      - ./video_projects:/app/video_projects
+      - ./upload_queue:/app/upload_queue
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_ENV=local
+      - DATABASE_URL=sqlite:///./kuiper.db
+    restart: always
+
+  # Frontend Service (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sparse-kuiper-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  projects_data:
+  video_projects_data:
+  upload_queue_data:
