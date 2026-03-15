@@ -43,7 +43,89 @@ class TemplateUpdatePayload(BaseModel):
     prefix: Optional[str] = None
     suffix: Optional[str] = None
 
+
+class LooperPreset(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    mode: str = "manual"  # manual, target, audio
+    default_loops: int = 3
+    target_duration: int = 15
+    cut_start: float = 3.0
+    disable_crossfade: bool = False
+    crossfade_duration: float = 1.5
+    quality: str = "high"  # high (18), medium (23), low (28)
+    resolution: str = "original"  # original, 1080p, 720p, 480p
+    mute_original: bool = False
+    audio_fade: bool = False
+    audio_fade_duration: float = 2.0
+
+
 # --- Endpoints ---
+
+@router.get("/looper-presets")
+async def list_looper_presets():
+    """Returns all video looper presets."""
+    config = _read_config()
+    presets = config.get("looper_presets", {})
+    result = []
+    for name, data in presets.items():
+        result.append({
+            "name": name,
+            **data
+        })
+    return result
+
+
+@router.post("/looper-presets")
+async def create_looper_preset(req: LooperPreset):
+    """Creates a new looper preset."""
+    config = _read_config()
+    presets = config.setdefault("looper_presets", {})
+
+    if req.name in presets:
+        raise HTTPException(status_code=400, detail="Preset with this name already exists.")
+
+    presets[req.name] = req.model_dump(exclude={"name"})
+    _write_config(config)
+    logger.info(f"Created looper preset: {req.name}")
+    return {"status": "success", "message": f"Preset '{req.name}' created."}
+
+
+@router.put("/looper-presets/{name}")
+async def update_looper_preset(name: str, req: LooperPreset):
+    """Updates an existing looper preset."""
+    config = _read_config()
+    presets = config.get("looper_presets", {})
+
+    if name not in presets:
+        raise HTTPException(status_code=404, detail="Preset not found.")
+
+    # If name is changed, we need to handle it
+    if req.name != name:
+        if req.name in presets:
+            raise HTTPException(status_code=400, detail="Preset with the new name already exists.")
+        del presets[name]
+    
+    presets[req.name] = req.model_dump(exclude={"name"})
+    _write_config(config)
+    logger.info(f"Updated looper preset: {req.name}")
+    return {"status": "success", "message": f"Preset '{req.name}' updated."}
+
+
+@router.delete("/looper-presets/{name}")
+async def delete_looper_preset(name: str):
+    """Deletes a looper preset."""
+    config = _read_config()
+    presets = config.get("looper_presets", {})
+
+    if name not in presets:
+        raise HTTPException(status_code=404, detail="Preset not found.")
+
+    del presets[name]
+    _write_config(config)
+    logger.info(f"Deleted looper preset: {name}")
+    return {"status": "success", "message": f"Preset '{name}' deleted."}
+
 
 @router.get("/templates")
 async def list_templates():
