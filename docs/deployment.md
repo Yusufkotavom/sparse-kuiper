@@ -234,6 +234,54 @@ ngrok http 80
 Jika Anda pakai reverse proxy satu origin seperti ini, set frontend:
 - `NEXT_PUBLIC_API_URL=/api/v1`
 
+### Cloudflare Tunnel (recommended, URL stabil tanpa buka port)
+Jika backend jalan di PC sendiri tapi frontend di Vercel, backend harus punya URL publik. Cara yang stabil adalah Cloudflare Tunnel (tanpa port-forwarding router).
+
+Contoh setup untuk domain: `piiblog.net` dan subdomain API: `api.piiblog.net`.
+
+1) Login Cloudflare (Windows):
+```powershell
+& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel login
+```
+
+2) Buat named tunnel:
+```powershell
+& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel create nomad-hub
+```
+
+3) Buat subdomain DNS yang mengarah ke tunnel:
+```powershell
+& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel route dns nomad-hub api.piiblog.net
+```
+
+4) Jalankan backend lokal:
+```bash
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+5) Jalankan tunnel (pakai config):
+```yml
+# cloudflared.yml (contoh)
+tunnel: nomad-hub
+credentials-file: C:\Users\<USER>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: api.piiblog.net
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
+```powershell
+& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --config .\cloudflared.yml run nomad-hub
+```
+
+6) Test:
+- `https://api.piiblog.net/docs`
+- `https://api.piiblog.net/api/v1/settings/system-prompts`
+
+7) Set Vercel Environment:
+- `NEXT_PUBLIC_API_URL=https://api.piiblog.net/api/v1`
+
 ---
 
 ## 9. Environment Variables Reference

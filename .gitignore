@@ -91,3 +91,6 @@ archive/
 # Cloudflare Tunnel local config (avoid committing host-specific paths)
 cloudflared.yml
 
+# Cloudflare Tunnel credentials (secret)
+.cloudflared/
+

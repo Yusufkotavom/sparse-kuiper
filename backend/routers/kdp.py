@@ -45,6 +45,10 @@ class CurateRequest(BaseModel):
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
 
+class MoveRequest(BaseModel):
+    filename: str
+    target_stage: str
+
 @router.get("/projects")
 async def list_projects():
     """Lists all projects in the projects directory."""
@@ -181,7 +185,7 @@ async def get_project_prompts(project_name: str):
     """Loads saved prompts for a project."""
     try:
         base_dir = Path(__file__).resolve().parent.parent.parent
-        prompts_file = base_dir / "projects" / project_name / "prompts.txt"
+        prompts_file = base_dir / "projects" / project_name / "prompts.json"
         
         if not prompts_file.exists():
             return {"prompts": []}
@@ -312,6 +316,39 @@ async def archive_image(project_name: str, req: CurateRequest):
         os.rename(source_path, archive_path)
         
         return {"status": "success", "message": f"Moved {req.filename} to archive"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/projects/{project_name}/move")
+async def move_image_stage(project_name: str, req: MoveRequest):
+    try:
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        project_dir = base_dir / "projects" / project_name
+        target = req.target_stage.lower()
+        raw_dir = project_dir / "raw_images"
+        final_dir = project_dir / "final"
+        archive_dir = project_dir / "archive"
+        if target not in {"raw", "final", "archive"}:
+            raise HTTPException(status_code=400, detail="Invalid target_stage")
+        target_dir = raw_dir if target == "raw" else final_dir if target == "final" else archive_dir
+        raw_path = raw_dir / req.filename
+        final_path = final_dir / req.filename
+        archive_path = archive_dir / req.filename
+        source_path = None
+        for path in [raw_path, final_path, archive_path]:
+            if path.exists():
+                source_path = path
+                break
+        if not source_path:
+            raise HTTPException(status_code=404, detail="Image not found in project")
+        dest_path = target_dir / req.filename
+        if source_path == dest_path:
+            return {"status": "success", "message": f"{req.filename} already in {target}"}
+        os.makedirs(target_dir, exist_ok=True)
+        os.rename(source_path, dest_path)
+        return {"status": "success", "message": f"Moved {req.filename} to {target}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

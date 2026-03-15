@@ -179,6 +179,7 @@ Browser (Next.js:3000) ──HTTP──► FastAPI Backend (:8000) ──SQLAlch
 - 📚 [`docs/api_reference.md`](docs/api_reference.md) — Full REST API reference
 - 🚀 [`docs/deployment.md`](docs/deployment.md) — VPS Linux deployment guide
 - 🏗️ [`docs/architecture.md`](docs/architecture.md) — System architecture & data flows
+- 🎨 [`docs/shadcn_first_ui.md`](docs/shadcn_first_ui.md) — Shadcn-first UI consistency rules
 - 🤖 [`CLAUDE.md`](CLAUDE.md) — AI assistant coding instructions
 
 ---

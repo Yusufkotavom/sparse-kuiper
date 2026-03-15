@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `frontend/` contains the Next.js (App Router) UI:
   - `frontend/src/app/` contains route pages (`<route>/page.tsx`)
-  - `frontend/src/components/` contains shared UI components (Sidebar, wrappers, atoms, shadcn/ui)
+  - `frontend/src/components/` contains shared UI components (Sidebar, wrappers, atoms, shadcn-style `ui/` primitives)
   - `frontend/src/lib/api.ts` centralizes all frontend API calls and uses `NEXT_PUBLIC_API_URL`
 - `backend/` contains the FastAPI server:
   - `backend/main.py` registers routers, mounts static dirs, and runs startup DB init/migrations
@@ -32,7 +32,12 @@
 - Follow the existing style of the edited file (formatting is not fully uniform across the repo).
 - UI pages live under `frontend/src/app/<route>/page.tsx` and should include `"use client"` when using client-side hooks.
 - Centralize API calls in `frontend/src/lib/api.ts` (do not scatter raw `fetch()` calls across pages).
-- Prefer existing UI primitives from `frontend/src/components/ui/*` and design tokens from `frontend/src/app/globals.css`.
+- SHADCN-FIRST policy: UI should always use standardized shadcn/ui primitives from `frontend/src/components/ui/*` (Button, Card, Input, Textarea, Label, Dialog, dll.) before considering custom HTML.
+- REUSE-FIRST policy: before adding a new component, check and reuse existing shared components in `frontend/src/components/atoms/*` and `frontend/src/components/organisms/*`.
+- Layout and visual tokens should reuse the existing design tokens from `frontend/src/app/globals.css` (spacing via `--section-px/py`, `--card-p`, `--gap-base`; warna via `--background`, `--surface`, `--elevated`, `--border`, `--primary`, `--muted-foreground`, dll.) supaya tampilan konsisten di seluruh halaman.
+- Komponen tingkat-atas (seperti PageHeader, StatusBadge, EmptyState, ProjectDrawer) harus dibangun di atas primitive `ui/*` tersebut, bukan langsung memakai HTML + class acak di setiap halaman.
+- Prefer reusable UI patterns: `PageHeader`, `EmptyState`, `StatusBadge`, `ViewToggle`, `SegmentedTabs`, `KpiCard`, dan `ProjectDrawer` untuk menjaga konsistensi lintas halaman.
+- Refer to `docs/shadcn_first_ui.md` before implementing or refactoring frontend UI.
 
 ## Testing Guidelines
 - No unit-test runner is configured yet.
