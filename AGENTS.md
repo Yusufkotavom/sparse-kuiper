@@ -1,3 +1,5 @@
+dikerjakan di windows os
+
 # Repository Guidelines
 
 ## Project Structure & Module Organization

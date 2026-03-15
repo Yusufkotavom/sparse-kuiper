@@ -47,17 +47,49 @@ class TemplateUpdatePayload(BaseModel):
 class LooperPreset(BaseModel):
     name: str
     description: Optional[str] = ""
-    mode: str = "manual"  # manual, target, audio
+    mode: str = "manual"            # manual, target, audio
     default_loops: int = 3
-    target_duration: int = 15
+    target_duration: float = 15.0  # float to match frontend
     cut_start: float = 3.0
     disable_crossfade: bool = False
     crossfade_duration: float = 1.5
-    quality: str = "high"  # high (18), medium (23), low (28)
-    resolution: str = "original"  # original, 1080p, 720p, 480p
-    mute_original: bool = False
-    audio_fade: bool = False
+    quality: str = "high"           # high (crf18), medium (23), low (28)
+    resolution: str = "original"   # original, 1080p, 1080p_p, 720p, 720p_p, 480p, 480p_p
+
+    # Audio — names match frontend LooperPreset interface
+    mute_original_audio: bool = False
+    enable_audio_fade: bool = False
     audio_fade_duration: float = 2.0
+
+    # Studio toggles
+    enable_looper: Optional[bool] = True
+    enable_scene_mixer: Optional[bool] = False
+
+    # Scene mixer
+    scene_mixer_source: Optional[str] = "original"
+    scene_mixer_clip_count: Optional[int] = 10
+    scene_mixer_order: Optional[str] = "random"
+    scene_mixer_full_duration: Optional[bool] = False
+    scene_mixer_max_duration: Optional[float] = 5.0
+
+    # Effects
+    effect_zoom_crop: Optional[bool] = False
+    effect_zoom_mode: Optional[str] = "random"
+    effect_zoom_percent: Optional[float] = 90.0
+    effect_mirror: Optional[bool] = False
+    effect_speed_ramping: Optional[bool] = False
+    effect_color_tweaking: Optional[bool] = False
+    effect_film_grain: Optional[bool] = False
+    effect_pulsing_vignette: Optional[bool] = False
+
+    # Transitions & Watermark
+    transition_type: Optional[str] = "none"
+    watermark_url: Optional[str] = None
+    watermark_scale: Optional[int] = 50
+    watermark_opacity: Optional[int] = 100
+    watermark_position: Optional[str] = "bottom_right"
+    watermark_margin_x: Optional[int] = 24
+    watermark_margin_y: Optional[int] = 24
 
 
 # --- Endpoints ---
