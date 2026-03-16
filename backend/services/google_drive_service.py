@@ -105,7 +105,15 @@ def list_files(token_dict: dict, parent_id: Optional[str] = None, q: Optional[st
         query_parts.append(q)
     query = " and ".join(query_parts) if query_parts else None
     fields = "nextPageToken, files(id, name, mimeType, size, modifiedTime, parents)"
-    resp = drive.files().list(q=query, fields=fields, pageToken=page_token or None, spaces="drive").execute()
+    resp = drive.files().list(
+        q=query,
+        fields=fields,
+        pageToken=page_token or None,
+        spaces="drive",
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True,
+        corpora="allDrives",
+    ).execute()
     return {"files": resp.get("files", []), "nextPageToken": resp.get("nextPageToken"), "refreshed_token": token_dict}
 
 def create_folder(token_dict: dict, name: str, parent_id: Optional[str] = None) -> Dict[str, Any]:
@@ -139,7 +147,7 @@ def move_file(token_dict: dict, file_id: str, target_parent_id: str) -> Dict[str
 
 def download_file_bytes(token_dict: dict, file_id: str) -> bytes:
     drive, _ = build_drive_client(token_dict)
-    request = drive.files().get_media(fileId=file_id)
+    request = drive.files().get_media(fileId=file_id, supportsAllDrives=True)
     buf = io.BytesIO()
     downloader = MediaIoBaseDownload(buf, request)
     done = False
@@ -148,3 +156,30 @@ def download_file_bytes(token_dict: dict, file_id: str) -> bytes:
         if status:
             logger.info(f"[Google Drive] Download {int(status.progress() * 100)}%")
     return buf.getvalue()
+
+def download_to_path(token_dict: dict, file_id: str, output_path: str, chunksize: int = 8 * 1024 * 1024) -> int:
+    """
+    Stream download a Drive file directly to disk. Returns total bytes written.
+    Use for large files (videos/images) to avoid keeping them in memory.
+    """
+    drive, _ = build_drive_client(token_dict)
+    request = drive.files().get_media(fileId=file_id, supportsAllDrives=True)
+    total = 0
+    with open(output_path, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request, chunksize=chunksize)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+            if status:
+                pct = int(status.progress() * 100)
+                logger.info(f"[Google Drive] Download {pct}% → {output_path}")
+    try:
+        total = os.path.getsize(output_path)
+    except Exception:
+        pass
+    return total
+
+def get_file_meta(token_dict: dict, file_id: str) -> dict:
+    drive, token_dict = build_drive_client(token_dict)
+    meta = drive.files().get(fileId=file_id, fields="id, name, mimeType, parents", supportsAllDrives=True).execute()
+    return {"meta": meta, "refreshed_token": token_dict}

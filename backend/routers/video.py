@@ -229,7 +229,15 @@ async def curate_video(project_name: str, req: CurateRequest):
             raise HTTPException(status_code=404, detail="Video not found in raw_videos")
             
         os.makedirs(final_dir, exist_ok=True)
-        os.rename(raw_path, final_path)
+        try:
+            os.rename(raw_path, final_path)
+        except Exception:
+            try:
+                import shutil
+                shutil.copy2(raw_path, final_path)
+                os.remove(raw_path)
+            except Exception as ex:
+                raise HTTPException(status_code=500, detail=f"Failed to move file: {ex}")
         return {"status": "success", "message": f"Moved {req.filename} to final"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -258,7 +266,15 @@ async def archive_video(project_name: str, req: CurateRequest):
         if not source_path:
             raise HTTPException(status_code=404, detail="Video not found in project")
             
-        os.rename(source_path, archive_path)
+        try:
+            os.rename(source_path, archive_path)
+        except Exception:
+            try:
+                import shutil
+                shutil.copy2(source_path, archive_path)
+                os.remove(source_path)
+            except Exception as ex:
+                raise HTTPException(status_code=500, detail=f"Failed to move file: {ex}")
         return {"status": "success", "message": f"Moved {req.filename} to archive"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -289,7 +305,15 @@ async def move_video_stage(project_name: str, req: MoveRequest):
         if source_path == dest_path:
             return {"status": "success", "message": f"{req.filename} already in {target}"}
         os.makedirs(target_dir, exist_ok=True)
-        os.rename(source_path, dest_path)
+        try:
+            os.rename(source_path, dest_path)
+        except Exception:
+            try:
+                import shutil
+                shutil.copy2(source_path, dest_path)
+                os.remove(source_path)
+            except Exception as ex:
+                raise HTTPException(status_code=500, detail=f"Failed to move file: {ex}")
         return {"status": "success", "message": f"Moved {req.filename} to {target}"}
     except HTTPException:
         raise

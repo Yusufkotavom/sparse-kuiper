@@ -859,8 +859,12 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
 
     try:
         shutil.move(src_path, dest_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to move file: {e}")
+    except Exception:
+        try:
+            shutil.copy2(src_path, dest_path)
+            os.remove(src_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to move file: {e}")
 
     # Upsert queue item in DB
     item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == dest_filename).first()
