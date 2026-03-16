@@ -1,14 +1,18 @@
-# Gunakan image Python resmi yang ringan
 FROM python:3.11-slim
 
-# Set working directory di dalam container
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    APP_ENV=production \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 WORKDIR /app
 
-# Install system dependencies yang dibutuhkan untuk Playwright dan library lainnya
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     curl \
-    software-properties-common \
+    ffmpeg \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -20,31 +24,28 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxext6 \
     libxfixes3 \
-    librandr2 \
     libgbm1 \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
+    libglib2.0-0 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxrender1 \
+    libxrandr2 \
+    libxi6 \
+    libxtst6 \
+    libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements.txt terlebih dahulu untuk memanfaatkan caching Docker layer
-COPY requirements.txt .
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+RUN playwright install chromium firefox
 
-# Install dependencies Python
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . /app/backend
 
-# Install Playwright browsers (chromium & firefox sesuai config)
-RUN playwright install chromium firefox --with-deps
+RUN mkdir -p /app/projects /app/video_projects /app/upload_queue /app/data/logs /app/data/sessions
 
-# Copy seluruh kode backend ke dalam container
-COPY . .
-
-# Expose port yang digunakan FastAPI
 EXPOSE 8000
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV APP_ENV=production
-
-# Jalankan aplikasi menggunakan uvicorn dengan --reload untuk testing lokal
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sparse-kuiper-backend-local
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./projects:/app/projects
+      - ./video_projects:/app/video_projects
+      - ./upload_queue:/app/upload_queue
+      - ./data:/app/data
+      - ./chrome_profile:/app/chrome_profile
+      - ./global_profiles:/app/global_profiles
+      - ./config.json:/app/config.json
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_ENV=local
+    restart: unless-stopped

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 import json
 from pathlib import Path
 from backend.core.config import settings
@@ -67,6 +67,7 @@ class LooperPreset(BaseModel):
 
     # Scene mixer
     scene_mixer_source: Optional[str] = "original"
+    scene_mixer_selected_files: Optional[List[str]] = None
     scene_mixer_clip_count: Optional[int] = 10
     scene_mixer_order: Optional[str] = "random"
     scene_mixer_full_duration: Optional[bool] = False
@@ -90,6 +91,8 @@ class LooperPreset(BaseModel):
     watermark_position: Optional[str] = "bottom_right"
     watermark_margin_x: Optional[int] = 24
     watermark_margin_y: Optional[int] = 24
+    watermark_key_black: Optional[bool] = False
+    watermark_key_green: Optional[bool] = False
 
 
 # --- Endpoints ---

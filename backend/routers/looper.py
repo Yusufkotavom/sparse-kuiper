@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from uuid import uuid4
 from pathlib import Path, PurePosixPath
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -82,6 +82,7 @@ class LooperRunRequest(BaseModel):
     enable_looper: Optional[bool] = True
     enable_scene_mixer: Optional[bool] = False
     scene_mixer_source: Optional[str] = "original"
+    scene_mixer_selected_files: Optional[List[str]] = None
     scene_mixer_clip_count: Optional[int] = 10
     scene_mixer_order: Optional[str] = "random"
     scene_mixer_full_duration: Optional[bool] = False
@@ -101,6 +102,8 @@ class LooperRunRequest(BaseModel):
     watermark_position: Optional[str] = "bottom_right"
     watermark_margin_x: Optional[int] = 24
     watermark_margin_y: Optional[int] = 24
+    watermark_key_black: Optional[bool] = False
+    watermark_key_green: Optional[bool] = False
 
 
 class LooperRunResponse(BaseModel):
@@ -140,6 +143,7 @@ async def looper_run(req: LooperRunRequest, background_tasks: BackgroundTasks):
     input_path  = project_dir / Path(normalized_file)
     custom_audio_path: Optional[Path] = None
     watermark_source: Optional[str] = None
+    scene_mixer_selected_paths: Optional[List[str]] = None
 
     if not input_path.exists():
         raise HTTPException(
@@ -177,6 +181,42 @@ async def looper_run(req: LooperRunRequest, background_tasks: BackgroundTasks):
                     )
                 watermark_source = str(watermark_path)
 
+    mixer_source = (req.scene_mixer_source or "original").strip().lower()
+    if bool(req.enable_scene_mixer) and mixer_source == "selected":
+        raw_items = req.scene_mixer_selected_files or []
+        if not isinstance(raw_items, list):
+            raise HTTPException(status_code=400, detail="scene_mixer_selected_files harus berupa list.")
+
+        seen = set()
+        resolved: List[str] = []
+
+        def _add(p: Path):
+            key = str(p.resolve())
+            if key in seen:
+                return
+            seen.add(key)
+            resolved.append(str(p))
+
+        _add(input_path)
+        for item in raw_items:
+            if not item:
+                continue
+            normalized_item = _normalize_project_file(req.project, str(item))
+            candidate = project_dir / Path(normalized_item)
+            if not candidate.exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Scene mixer file tidak ditemukan: {req.project}/{normalized_item}",
+                )
+            _add(candidate)
+            if len(resolved) >= 24:
+                break
+
+        if len(resolved) <= 1:
+            scene_mixer_selected_paths = None
+        else:
+            scene_mixer_selected_paths = resolved
+
     # Create job entry
     job = create_job()
     unique_token = job.job_id.split("-")[0]
@@ -210,6 +250,7 @@ async def looper_run(req: LooperRunRequest, background_tasks: BackgroundTasks):
             enable_looper=bool(req.enable_looper),
             enable_scene_mixer=bool(req.enable_scene_mixer),
             scene_mixer_source=(req.scene_mixer_source or "original"),
+            scene_mixer_selected_paths=scene_mixer_selected_paths,
             scene_mixer_clip_count=int(req.scene_mixer_clip_count or 10),
             scene_mixer_order=(req.scene_mixer_order or "random"),
             scene_mixer_full_duration=bool(req.scene_mixer_full_duration),
@@ -229,6 +270,8 @@ async def looper_run(req: LooperRunRequest, background_tasks: BackgroundTasks):
             watermark_position=(req.watermark_position or "bottom_right"),
             watermark_margin_x=int(req.watermark_margin_x if req.watermark_margin_x is not None else 24),
             watermark_margin_y=int(req.watermark_margin_y if req.watermark_margin_y is not None else 24),
+            watermark_key_black=bool(req.watermark_key_black),
+            watermark_key_green=bool(req.watermark_key_green),
         )
 
     async def _run_async():
