@@ -22,11 +22,19 @@ class DownloadRequest(BaseModel):
     url: str
     project_name: str = "Scraped_Downloads"
     download_thumbnail: bool = False
+    cookies_path: Optional[str] = ""
+    user_agent: Optional[str] = ""
+    use_mweb_client: bool = False
+    po_token: Optional[str] = ""
     
 class BatchDownloadRequest(BaseModel):
     urls: List[str]
     project_name: str = "Scraped_Downloads"
     download_thumbnail: bool = False
+    cookies_path: Optional[str] = ""
+    user_agent: Optional[str] = ""
+    use_mweb_client: bool = False
+    po_token: Optional[str] = ""
 
 @router.post("/extract-info")
 async def extract_info(req: ExtractRequest):
@@ -80,7 +88,16 @@ async def download_single(req: DownloadRequest, background_tasks: BackgroundTask
                     pass
 
     async def run_download():
-        res = await download_video(req.url, req.project_name, req.download_thumbnail)
+        res = await download_video(
+            req.url,
+            req.project_name,
+            req.download_thumbnail,
+            req.cookies_path or "",
+            req.user_agent or "",
+            req.po_token or "",
+            req.use_mweb_client,
+            True
+        )
         if res.get("success"):
             logger.info(f"Successfully downloaded {req.url} to {res.get('file')}")
             
@@ -117,7 +134,16 @@ async def download_batch(req: BatchDownloadRequest, background_tasks: Background
 
     async def run_batch():
         for url in urls_to_download:
-            res = await download_video(url, req.project_name, req.download_thumbnail)
+            res = await download_video(
+                url,
+                req.project_name,
+                req.download_thumbnail,
+                req.cookies_path or "",
+                req.user_agent or "",
+                req.po_token or "",
+                req.use_mweb_client,
+                True
+            )
             if res.get("success"):
                 logger.info(f"Successfully downloaded {url} to {res.get('file')}")
             else:

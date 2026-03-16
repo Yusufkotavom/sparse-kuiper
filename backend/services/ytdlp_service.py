@@ -125,7 +125,7 @@ def extract_playlist_info(url: str, platform: str, media_type: str = "all", limi
         return {"success": False, "message": str(e)}
 
 
-async def download_video(url: str, project_name: str = "Downloads", download_thumbnail: bool = False) -> dict:
+async def download_video(url: str, project_name: str = "Downloads", download_thumbnail: bool = False, cookies_path: str = "", user_agent: str = "", po_token: str = "", use_mweb_client: bool = False, force_watch: bool = True) -> dict:
     """
     Downloads a single video and its metadata JSON using yt-dlp into the video_projects folder.
     """
@@ -136,6 +136,14 @@ async def download_video(url: str, project_name: str = "Downloads", download_thu
     file_id = str(uuid.uuid4())[:8]
     output_tmpl = str(target_dir / f"%(title)s_{file_id}.%(ext)s")
     
+    if force_watch and "/shorts/" in url:
+        try:
+            _vid = url.split("/shorts/")[-1].split("?")[0]
+            if _vid:
+                url = f"https://www.youtube.com/watch?v={_vid}"
+        except Exception:
+            pass
+
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_tmpl,
@@ -144,6 +152,19 @@ async def download_video(url: str, project_name: str = "Downloads", download_thu
         'no_warnings': True,
         'logger': ProjectLogger(project_name)
     }
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    if user_agent:
+        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+    _extractor_args = {}
+    if use_mweb_client or po_token:
+        _extractor_args['youtube'] = {}
+        if use_mweb_client:
+            _extractor_args['youtube']['player_client'] = ['mweb']
+        if po_token:
+            _extractor_args['youtube']['po_token'] = [po_token]
+    if _extractor_args:
+        ydl_opts['extractor_args'] = _extractor_args
     
     if download_thumbnail:
         ydl_opts['writethumbnail'] = True
