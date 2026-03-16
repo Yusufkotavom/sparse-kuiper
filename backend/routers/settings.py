@@ -320,3 +320,100 @@ async def update_groq_api_key(req: GroqKeyPayload):
     _write_config(config)
     settings.groq_api_key = req.value.strip()
     return {"status": "success"}
+
+
+class OpenAIKeyPayload(BaseModel):
+    value: str
+
+
+@router.get("/openai-api-key")
+async def get_openai_api_key():
+    config = _read_config()
+    key = config.get("openai_api_key", "") or settings.openai_api_key or ""
+    masked = ""
+    if key:
+        masked = ("*" * max(0, len(key) - 4)) + key[-4:]
+    return {"has_key": bool(key), "masked": masked}
+
+
+@router.put("/openai-api-key")
+async def update_openai_api_key(req: OpenAIKeyPayload):
+    if not req.value or not req.value.strip():
+        raise HTTPException(status_code=400, detail="Value is required")
+    config = _read_config()
+    config["openai_api_key"] = req.value.strip()
+    _write_config(config)
+    settings.openai_api_key = req.value.strip()
+    return {"status": "success"}
+
+
+class GeminiKeyPayload(BaseModel):
+    value: str
+
+
+@router.get("/gemini-api-key")
+async def get_gemini_api_key():
+    config = _read_config()
+    key = config.get("gemini_api_key", "") or settings.gemini_api_key or ""
+    masked = ""
+    if key:
+        masked = ("*" * max(0, len(key) - 4)) + key[-4:]
+    return {"has_key": bool(key), "masked": masked}
+
+
+@router.put("/gemini-api-key")
+async def update_gemini_api_key(req: GeminiKeyPayload):
+    if not req.value or not req.value.strip():
+        raise HTTPException(status_code=400, detail="Value is required")
+    config = _read_config()
+    config["gemini_api_key"] = req.value.strip()
+    _write_config(config)
+    settings.gemini_api_key = req.value.strip()
+    return {"status": "success"}
+
+
+class AzureOpenAIPayload(BaseModel):
+    endpoint: Optional[str] = None
+    api_key: Optional[str] = None
+    deployment: Optional[str] = None
+    api_version: Optional[str] = None
+
+
+@router.get("/azure-openai")
+async def get_azure_openai_settings():
+    config = _read_config()
+    azure = config.get("azure_openai", {}) if isinstance(config.get("azure_openai", {}), dict) else {}
+    api_key = azure.get("api_key", "") or settings.azure_openai_api_key or ""
+    masked = ""
+    if api_key:
+        masked = ("*" * max(0, len(api_key) - 4)) + api_key[-4:]
+    return {
+        "endpoint": azure.get("endpoint", "") or settings.azure_openai_endpoint or "",
+        "deployment": azure.get("deployment", "") or settings.azure_openai_deployment or "",
+        "api_version": azure.get("api_version", "") or settings.azure_openai_api_version or "",
+        "has_key": bool(api_key),
+        "masked": masked,
+    }
+
+
+@router.put("/azure-openai")
+async def update_azure_openai_settings(req: AzureOpenAIPayload):
+    config = _read_config()
+    azure = config.get("azure_openai", {}) if isinstance(config.get("azure_openai", {}), dict) else {}
+    if req.endpoint is not None:
+        azure["endpoint"] = req.endpoint.strip()
+        settings.azure_openai_endpoint = req.endpoint.strip()
+    if req.deployment is not None:
+        azure["deployment"] = req.deployment.strip()
+        settings.azure_openai_deployment = req.deployment.strip()
+    if req.api_version is not None:
+        azure["api_version"] = req.api_version.strip()
+        settings.azure_openai_api_version = req.api_version.strip()
+    if req.api_key is not None:
+        if not req.api_key.strip():
+            raise HTTPException(status_code=400, detail="api_key is required")
+        azure["api_key"] = req.api_key.strip()
+        settings.azure_openai_api_key = req.api_key.strip()
+    config["azure_openai"] = azure
+    _write_config(config)
+    return {"status": "success"}

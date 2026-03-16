@@ -35,6 +35,7 @@ class MoveRequest(BaseModel):
 
 class GenerateVideoRequest(BaseModel):
     use_reference: bool = True
+    headless_mode: bool = True
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
@@ -194,7 +195,13 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
             kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
             
         process = subprocess.Popen(
-            [sys.executable, str(bot_script), project_name, str(req.use_reference).lower()],
+            [
+                sys.executable,
+                str(bot_script),
+                project_name,
+                str(req.use_reference).lower(),
+                str(req.headless_mode).lower(),
+            ],
             cwd=str(base_dir),
             **kwargs
         )

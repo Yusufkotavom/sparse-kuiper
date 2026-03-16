@@ -20,6 +20,8 @@ class PromptRequest(BaseModel):
     topic: str
     number_n: int
     character_type: str
+    model: str | None = None
+    provider: str | None = None
 
 class SavePromptsRequest(BaseModel):
     prompts: List[str]
@@ -354,7 +356,7 @@ async def move_image_stage(project_name: str, req: MoveRequest):
 
 @router.post("/prompts", response_model=List[str])
 async def create_prompts(req: PromptRequest):
-    """Generates a list of prompts via Groq."""
+    """Generates a list of prompts via configured LLM provider."""
     try:
         prompts = generate_kdp_prompts(
             system_prompt=req.system_prompt,
@@ -362,7 +364,9 @@ async def create_prompts(req: PromptRequest):
             suffix_prompt=req.suffix_prompt,
             topic=req.topic,
             number_n=req.number_n,
-            character_type=req.character_type
+            character_type=req.character_type,
+            model=req.model,
+            provider=req.provider,
         )
         return prompts
     except Exception as e:

@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 import subprocess
 import sys
 from pathlib import Path
-from groq import Groq
 from sqlalchemy.orm import Session
 from backend.routers.settings import _read_config
 from backend.core.config import UPLOAD_QUEUE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR, settings
+from backend.services.prompt_engine import _chat_completion_text, _resolve_provider_and_model
 
 # Sessions directory (mirrors accounts.py)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,6 +73,8 @@ class BatchUploadRequest(BaseModel):
 
 class MetadataRequest(BaseModel):
     prompt: str
+    provider: str | None = None
+    model: str | None = None
 
 
 class QueueAddRequest(BaseModel):
@@ -729,9 +731,6 @@ async def trigger_upload(filename: str, request: UploadRequest, background_tasks
 
 @router.post("/generate-metadata")
 async def generate_metadata(request: MetadataRequest):
-    if not settings.groq_api_key:
-        raise HTTPException(status_code=500, detail="Groq API Key is not configured.")
-
     # Load prompt from config.json (editable via Settings page)
     from backend.routers.settings import _read_config, DEFAULT_SYSTEM_PROMPTS
     _cfg = _read_config()
@@ -739,8 +738,6 @@ async def generate_metadata(request: MetadataRequest):
         _cfg.get("system_prompts", {}).get("metadata_generate")
         or DEFAULT_SYSTEM_PROMPTS["metadata_generate"]
     )
-
-    client = Groq(api_key=settings.groq_api_key)
 
     def _parse_json_loose(text: str) -> dict:
         s = text.strip()
@@ -766,9 +763,16 @@ async def generate_metadata(request: MetadataRequest):
         return {}
 
     try:
-        # First attempt: no response_format (avoid 400 json_validate_failed), strong instruction in user prompt
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        default_model = "groq:llama-3.3-70b-versatile"
+        provider_name, model_name = _resolve_provider_and_model(request.provider, request.model or default_model)
+        if not model_name and provider_name == "openai":
+            model_name = "gpt-4o-mini"
+        if not model_name and provider_name == "gemini":
+            model_name = "gemini-1.5-flash"
+
+        content = _chat_completion_text(
+            provider=provider_name,
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -783,7 +787,6 @@ async def generate_metadata(request: MetadataRequest):
             ],
             temperature=0.5,
         )
-        content = completion.choices[0].message.content
         result_json = _parse_json_loose(content or "")
         title = result_json.get("title") or "Viral Video"
         description = result_json.get("description") or "Check this out!"

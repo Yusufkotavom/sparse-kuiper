@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     
     # Placeholder for Groq API Key (loaded from config.json or env)
     groq_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+
+    azure_openai_api_key: str = ""
+    azure_openai_endpoint: str = ""
+    azure_openai_deployment: str = ""
+    azure_openai_api_version: str = ""
 
     class Config:
         env_file = ".env"
@@ -31,6 +38,20 @@ def load_local_config():
                 data = json.load(f)
                 if "groq_api_key" in data:
                     settings.groq_api_key = data["groq_api_key"]
+                if "openai_api_key" in data:
+                    settings.openai_api_key = data["openai_api_key"]
+                if "gemini_api_key" in data:
+                    settings.gemini_api_key = data["gemini_api_key"]
+
+                azure = data.get("azure_openai", {}) if isinstance(data.get("azure_openai", {}), dict) else {}
+                if "api_key" in azure:
+                    settings.azure_openai_api_key = azure.get("api_key", "") or ""
+                if "endpoint" in azure:
+                    settings.azure_openai_endpoint = azure.get("endpoint", "") or ""
+                if "deployment" in azure:
+                    settings.azure_openai_deployment = azure.get("deployment", "") or ""
+                if "api_version" in azure:
+                    settings.azure_openai_api_version = azure.get("api_version", "") or ""
         except Exception as e:
             print(f"Error loading local config: {e}")
 
