@@ -78,7 +78,7 @@ data/upload_jobs/
 backend/data/upload_jobs/
 
 # Legacy / local tool bundles (not part of main app runtime)
-services/
+/services/
 
 # Archive artifacts (generated metadata, old project outputs)
 archive/
@@ -93,4 +93,3 @@ cloudflared.yml
 
 # Cloudflare Tunnel credentials (secret)
 .cloudflared/
-
