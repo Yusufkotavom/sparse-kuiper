@@ -219,8 +219,10 @@ async def get_youtube_auth_url(account_id: str, db: Session = Depends(get_db)):
 
     try:
         from backend.services.uploaders.youtube_uploader import generate_auth_url
-        auth_url, state, secret_path = generate_auth_url()
+        auth_url, state, secret_path, code_verifier = generate_auth_url()
         account.api_key = secret_path
+        if code_verifier:
+            account.api_secret = code_verifier
         db.commit()
         
         return {
@@ -255,7 +257,7 @@ async def connect_youtube(account_id: str, req: YoutubeConnectRequest, db: Sessi
 
         # Exchange code for tokens using the stored secret path
         secret_path = account.api_key or None
-        token_dict = exchange_code_for_token(req.code.strip(), client_secrets_path=secret_path)
+        token_dict = exchange_code_for_token(req.code.strip(), client_secrets_path=secret_path, code_verifier=account.api_secret or None)
 
         # Fetch channel info
         channel_info = get_channel_info(token_dict)
@@ -265,6 +267,7 @@ async def connect_youtube(account_id: str, req: YoutubeConnectRequest, db: Sessi
         account.channel_title = channel_info.get("channel_title", "")
         account.status = "active"
         account.last_login = datetime.now()
+        account.api_secret = None
         db.commit()
 
         logger.info(f"[YouTube OAuth] Account {account_id} connected: {account.channel_title}")
@@ -292,6 +295,113 @@ async def disconnect_youtube(account_id: str, db: Session = Depends(get_db)):
     db.commit()
     logger.info(f"[YouTube OAuth] Account {account_id} disconnected.")
     return {"status": "disconnected", "message": "YouTube disconnected."}
+
+# ─── Google Drive OAuth ─────────────────────────────────────────────────────────
+
+class DriveConnectRequest(BaseModel):
+    code: str
+
+@router.get("/{account_id}/drive/auth-url")
+async def get_drive_auth_url(account_id: str, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.platform != "google_drive":
+        raise HTTPException(status_code=400, detail="Account is not a Google Drive account")
+    try:
+        from backend.services.google_drive_service import generate_auth_url
+        auth_url, state, secret_path = generate_auth_url()
+        account.api_key = secret_path
+        db.commit()
+        return {
+            "auth_url": auth_url,
+            "instructions": (
+                "1. Open the URL below in your browser\n"
+                "2. Log in with your Google account\n"
+                "3. Grant access to Google Drive\n"
+                "4. Copy the authorization code\n"
+                "5. Paste it in the Connect form"
+            )
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"[Drive OAuth] Error generating auth URL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{account_id}/drive/connect")
+async def connect_drive(account_id: str, req: DriveConnectRequest, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.platform != "google_drive":
+        raise HTTPException(status_code=400, detail="Account is not a Google Drive account")
+    try:
+        from backend.services.google_drive_service import exchange_code_for_token
+        import json
+        secret_path = account.api_key or None
+        token_dict = exchange_code_for_token(req.code.strip(), client_secrets_path=secret_path)
+        account.oauth_token_json = json.dumps(token_dict)
+        account.channel_title = "Google Drive"
+        account.status = "active"
+        account.last_login = datetime.now()
+        db.commit()
+        logger.info(f"[Drive OAuth] Account {account_id} connected.")
+        return {"status": "active", "message": "Google Drive connected."}
+    except Exception as e:
+        logger.error(f"[Drive OAuth] Error connecting account {account_id}: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to connect: {str(e)}")
+
+class ExportCredsResponse(BaseModel):
+    accounts: List[dict]
+
+@router.get("/export-creds", response_model=ExportCredsResponse)
+async def export_credentials(include_tokens: bool = True, db: Session = Depends(get_db)):
+    rows = db.query(Account).all()
+    data = []
+    for acc in rows:
+        item = acc.to_dict(mask_secret=not include_tokens)
+        if include_tokens:
+            item["oauth_token_json"] = acc.oauth_token_json
+            item["api_secret"] = acc.api_secret
+        data.append(item)
+    return {"accounts": data}
+
+class ImportAccountsPayload(BaseModel):
+    accounts: List[dict]
+
+@router.post("/import-creds")
+async def import_credentials(payload: ImportAccountsPayload, db: Session = Depends(get_db)):
+    imported = 0
+    updated = 0
+    from backend.models.account import Account as Acc
+    for item in payload.accounts:
+        acc_id = item.get("id")
+        if not acc_id:
+            continue
+        row = db.query(Acc).filter(Acc.id == acc_id).first()
+        if not row:
+            row = Acc(
+                id=acc_id,
+                name=item.get("name") or "",
+                platform=item.get("platform") or "",
+                auth_method=item.get("auth_method") or "api",
+            )
+            db.add(row)
+            imported += 1
+        row.status = item.get("status") or row.status
+        row.api_key = item.get("api_key") or row.api_key
+        row.api_secret = item.get("api_secret") or row.api_secret
+        row.oauth_token_json = item.get("oauth_token_json") or row.oauth_token_json
+        row.channel_title = item.get("channel_title") or row.channel_title
+        row.tags = item.get("tags") or row.tags
+        row.notes = item.get("notes") or row.notes
+        row.browser_type = item.get("browser_type") or row.browser_type
+        row.proxy = item.get("proxy") or row.proxy
+        row.user_agent = item.get("user_agent") or row.user_agent
+        updated += 1
+    db.commit()
+    return {"message": "Import completed", "imported": imported, "updated": updated}
 
 # ─── Facebook OAuth ────────────────────────────────────────────────────────────
 

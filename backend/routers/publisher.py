@@ -346,12 +346,25 @@ def process_upload_task(filename: str, request: UploadRequest):
                                 "cookies_path": _cookies_path,
                                 "videos": [{
                                     "video_path": file_path,
-                                    "description": f"{request.title} {request.tags} #shorts",
+                                    "description": (
+                                        (
+                                            ((request.title or "").strip() + ("\n" if (request.title or "").strip() else "")) +
+                                            ((request.description or "").strip() + ("\n" if (request.description or "").strip() else ""))
+                                        )
+                                        +
+                                        " ".join(
+                                            t if t.startswith("#") else f"#{t}"
+                                            for t in (request.tags or "").replace(",", " ").split()
+                                            if t
+                                        )
+                                    ).strip(),
                                     "schedule": request.schedule or None,
                                     "product_id": request.product_id or None
                                 }],
                                 "headless": not request.open_browser,
-                                "pw_debug": request.pw_debug
+                                "pw_debug": request.pw_debug,
+                                "browser_type": (account.browser_type or "chromium"),
+                                "proxy": (account.proxy or None)
                             }
                             logger.info(f"[TikTok] Step2: payload built, writing file...")
 

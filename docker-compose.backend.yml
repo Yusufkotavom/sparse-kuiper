@@ -14,6 +14,10 @@ services:
       - ./chrome_profile:/app/chrome_profile
       - ./global_profiles:/app/global_profiles
       - ./config.json:/app/config.json
+      - ./nomad_hub.db:/app/nomad_hub.db
+      - ./config/google_secrets:/app/config/google_secrets
+      - ./config/youtube_secrets:/app/config/youtube_secrets
+      - ./client_secrets.json:/app/client_secrets.json
     environment:
       - PYTHONUNBUFFERED=1
       - APP_ENV=local

@@ -54,8 +54,16 @@ def run_upload(job: dict) -> dict:
 
         if schedule_str:
             try:
-                schedule_dt = datetime.datetime.fromisoformat(schedule_str.replace('Z', '+00:00'))
-                video_args["schedule"] = schedule_dt.replace(tzinfo=None)
+                s = schedule_str.strip()
+                if s.endswith("Z"):
+                    dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+                else:
+                    dt = datetime.datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    local_tz = datetime.datetime.now().astimezone().tzinfo
+                    dt = dt.replace(tzinfo=local_tz)
+                dt_utc = dt.astimezone(datetime.timezone.utc)
+                video_args["schedule"] = dt_utc.replace(tzinfo=None)
             except Exception as e:
                 log(f"⚠️ Invalid schedule format for {video_path}: {e}. Uploading immediately.")
 
@@ -69,6 +77,26 @@ def run_upload(job: dict) -> dict:
         
     headless_mode = job.get("headless", True)
     pw_debug = job.get("pw_debug", False)
+    browser_name = job.get("browser_type") or "chromium"
+    proxy_cfg = job.get("proxy")
+    proxy_dict = None
+    try:
+        if isinstance(proxy_cfg, dict):
+            proxy_dict = proxy_cfg
+        elif isinstance(proxy_cfg, str) and proxy_cfg.strip():
+            s = proxy_cfg.strip()
+            if "://" in s:
+                s = s.split("://", 1)[1]
+            creds, hostport = ("", s) if "@" not in s else (s.split("@", 1)[0], s.split("@", 1)[1])
+            host, port = (hostport.split(":")[0], hostport.split(":")[1]) if ":" in hostport else (hostport, "")
+            user = creds.split(":")[0] if ":" in creds else (creds or "")
+            password = creds.split(":")[1] if ":" in creds else ""
+            proxy_dict = {"host": host}
+            if port: proxy_dict["port"] = port
+            if user: proxy_dict["user"] = user
+            if password: proxy_dict["pass"] = password
+    except Exception:
+        proxy_dict = None
     try:
         log(f"Playwright headless={headless_mode}")
         if not headless_mode:
@@ -85,7 +113,8 @@ def run_upload(job: dict) -> dict:
     uploader = TikTokUploader(
         cookies=cookies_path, 
         headless=headless_mode,
-        browser='chrome'
+        browser=browser_name,
+        proxy=proxy_dict
     )
 
     try:
@@ -94,9 +123,22 @@ def run_upload(job: dict) -> dict:
         import time
         log("⏳ Waiting 5 seconds for browser to stabilize...")
         time.sleep(5)
-        uploader.upload_videos(formatted_videos)
+        failed_videos = uploader.upload_videos(formatted_videos)
+        total = len(formatted_videos)
+        failed = len(failed_videos or [])
+        succeeded = total - failed
         log("✅ Bulk upload sequence finished!")
-        return {"success": True, "message": f"{len(formatted_videos)} videos uploaded to TikTok."}
+        if failed:
+            try:
+                details = [{"path": v.get("path") or v.get("video"), "description": v.get("description", "")} for v in failed_videos]
+            except Exception:
+                details = []
+            return {
+                "success": False,
+                "message": f"{succeeded}/{total} videos uploaded. {failed} failed.",
+                "failed_videos": details
+            }
+        return {"success": True, "message": f"{total} videos uploaded to TikTok."}
 
     except Exception as e:
         log(f"❌ Upload failed: {e}")

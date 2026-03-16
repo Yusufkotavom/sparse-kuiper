@@ -110,7 +110,7 @@ def get_oauth_flow(client_secrets_path: Optional[str] = None) -> InstalledAppFlo
     return InstalledAppFlow.from_client_secrets_file(secrets_file, SCOPES)
 
 
-def generate_auth_url(client_secrets_path: Optional[str] = None) -> tuple[str, str, str]:
+def generate_auth_url(client_secrets_path: Optional[str] = None) -> tuple[str, str, str, Optional[str]]:
     """
     Generate an OAuth authorization URL.
     Returns (auth_url, state, client_secrets_path)
@@ -125,10 +125,11 @@ def generate_auth_url(client_secrets_path: Optional[str] = None) -> tuple[str, s
         include_granted_scopes="true",
         prompt="consent",  # Force refresh_token to always be returned
     )
-    return auth_url, state, client_secrets_path
+    code_verifier = getattr(flow, "code_verifier", None)
+    return auth_url, state, client_secrets_path, code_verifier
 
 
-def exchange_code_for_token(code: str, client_secrets_path: Optional[str] = None) -> dict:
+def exchange_code_for_token(code: str, client_secrets_path: Optional[str] = None, code_verifier: Optional[str] = None) -> dict:
     """
     Exchange authorization code for access + refresh tokens.
     Returns token dict suitable for storing in DB.
@@ -144,7 +145,17 @@ def exchange_code_for_token(code: str, client_secrets_path: Optional[str] = None
         if "code" in parsedParams:
             code = parsedParams["code"][0]
             
-    flow.fetch_token(code=code)
+    if code_verifier:
+        try:
+            setattr(flow, "code_verifier", code_verifier)
+        except Exception:
+            pass
+        try:
+            flow.fetch_token(code=code, code_verifier=code_verifier)
+        except TypeError:
+            flow.fetch_token(code=code)
+    else:
+        flow.fetch_token(code=code)
     creds = flow.credentials
     return _credentials_to_dict(creds)
 

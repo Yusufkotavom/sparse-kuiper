@@ -12,6 +12,74 @@ Panduan ini mencakup deployment di Linux VPS (Ubuntu 22.04 recommended).
 
 ---
 
+## Oracle Deployment Quick Start (Compose v2 + Cloudflare Tunnel)
+
+1) Buat VM Oracle
+- Image: Ubuntu 22.04 (x86_64)
+- Spec: 2 OCPU, 8GB RAM, disk 60GB (atau lebih)
+- Attach SSH key dan catat Public IP
+
+2) Networking
+- Security List/NSG: buka 22 (SSH), 443 (HTTPS)
+- Tambahkan ingress TCP 8001 untuk testing awal (opsional, tutup di production)
+- Buat Internet Gateway dan route `0.0.0.0/0` ke IGW
+
+3) SSH dan dasar sistem
+```bash
+ssh -i /path/to/key.pem ubuntu@<PUBLIC_IP>
+sudo apt update && sudo apt -y upgrade
+```
+
+4) Install Docker + Compose v2
+```bash
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-compose-plugin docker-buildx-plugin
+sudo systemctl enable --now docker
+```
+
+5) Clone repo dan siapkan runtime
+```bash
+sudo mkdir -p /opt/sparse-kuiper && sudo chown -R $USER:$USER /opt/sparse-kuiper
+cd /opt/sparse-kuiper
+git clone <REPO_URL> .
+mkdir -p data projects video_projects upload_queue chrome_profile global_profiles
+printf '{}' > config.json
+```
+
+6) Jalankan backend (Compose v2)
+```bash
+docker compose -f docker-compose.backend.yml up -d --build backend
+docker ps
+curl http://127.0.0.1:8001/
+```
+
+7) Aktifkan HTTPS via Cloudflare Tunnel
+```bash
+cloudflared tunnel login
+cloudflared tunnel create nomad-hub
+cloudflared tunnel route dns nomad-hub api.<domain>
+sudo tee /etc/cloudflared/config.yml >/dev/null <<'EOF'
+tunnel: nomad-hub
+credentials-file: /home/ubuntu/.cloudflared/<TUNNEL-UUID>.json
+ingress:
+  - hostname: api.<domain>
+    service: http://localhost:8001
+  - service: http_status:404
+EOF
+sudo cloudflared service install
+sudo systemctl enable --now cloudflared
+```
+
+8) Frontend
+- Vercel env: `NEXT_PUBLIC_API_URL=https://api.<domain>/api/v1`
+- Redeploy
+
+---
+
 ## 1. Server Setup
 
 ```bash
@@ -328,6 +396,69 @@ source venv/bin/activate && pip install -r backend/requirements.txt
 cd frontend && npm run build
 sudo systemctl restart nomad-backend nomad-frontend
 ```
+
+---
+
+## 11.1 Daily Maintenance (Ops)
+
+- Update code + rebuild (Compose v2):
+```bash
+cd /opt/sparse-kuiper
+git pull
+docker compose -f docker-compose.backend.yml up -d --build backend
+```
+
+- Cek status & log:
+```bash
+docker ps
+docker logs --tail=200 sparse-kuiper-backend-local
+sudo systemctl status cloudflared
+sudo journalctl -u cloudflared -f
+```
+
+- Tutup port testing (production best-practice):
+  - Hapus ingress TCP 8001 dari Security List/NSG, gunakan hanya 443 via tunnel/proxy
+
+---
+
+## 11.2 Troubleshooting
+
+### Compose: KeyError 'ContainerConfig' saat recreate
+Perbaikan:
+```bash
+docker compose -f docker-compose.backend.yml down --remove-orphans
+docker rm -f sparse-kuiper-backend-local || true
+docker compose -f docker-compose.backend.yml up -d --build backend
+```
+Jika tetap muncul pada `docker-compose` lama, upgrade ke Compose v2.
+
+### Bind mount config.json menyebabkan crash
+Jika `config.json` ter-mount sebagai folder:
+```bash
+rm -rf /opt/sparse-kuiper/config.json
+printf '{}' > /opt/sparse-kuiper/config.json
+docker compose -f docker-compose.backend.yml up -d --build backend
+```
+
+### Cloudflare Tunnel tidak tersambung
+Periksa:
+```bash
+sudo systemctl status cloudflared
+sudo journalctl -u cloudflared -f
+nslookup api.<domain>
+curl http://127.0.0.1:8001/
+```
+Pastikan `ingress` mengarah ke `http://localhost:8001` dan kredensial tunnel benar.
+
+### yt-dlp: diminta login/cookies
+Gunakan cookies Netscape dan User-Agent:
+```bash
+docker exec -it sparse-kuiper-backend-local yt-dlp \
+  --cookies /app/global_profiles/youtube_cookies.txt \
+  --add-headers "User-Agent: Mozilla/5.0 ..." \
+  "https://www.youtube.com/watch?v=<ID>"
+```
+Untuk Shorts, backend otomatis normalisasi ke `watch?v=<ID>`. Jika perlu client mweb/PO Token, gunakan parameter di endpoint `/api/v1/scraper/download`.
 
 ---
 

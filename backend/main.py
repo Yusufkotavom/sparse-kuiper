@@ -69,6 +69,8 @@ from backend.routers import scraper
 from backend.routers import scraper_projects
 from backend.routers import services
 from backend.routers import looper
+from backend.routers import drive
+from backend.routers import backup
 
 app.include_router(kdp.router)
 app.include_router(app_settings.router)
@@ -80,3 +82,5 @@ app.include_router(scraper.router, prefix="/api/v1/scraper", tags=["scraper"])
 app.include_router(scraper_projects.router, prefix="/api/v1/scraper-projects", tags=["scraper_projects"])
 app.include_router(services.router)
 app.include_router(looper.router)
+app.include_router(drive.router)
+app.include_router(backup.router)
