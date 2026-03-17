@@ -49,12 +49,19 @@ def _run(job):
         else:
             user_data_dir = os.path.join(session_dir, "chrome_profile")
             os.makedirs(user_data_dir, exist_ok=True)
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                channel="chrome",
-                ignore_default_args=["--enable-automation"],
-                **launch_kwargs
-            )
+            try:
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    channel="chrome",
+                    ignore_default_args=["--enable-automation"],
+                    **launch_kwargs
+                )
+            except Exception:
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    ignore_default_args=["--enable-automation"],
+                    **launch_kwargs
+                )
 
         try:
             page = context.pages[0] if context.pages else context.new_page()
@@ -217,4 +224,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

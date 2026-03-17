@@ -59,17 +59,20 @@ async def process_grok_project(project_name, project_dir, p, account_id="grok_de
     log_message(project_dir, f"📂 Memulai Project GROK: {project_name} (Total {len(prompts)} prompt)")
     
     try:
-        browser = await p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=headless_mode,
-            channel="chrome",
-            args=[
+        launch_kwargs = {
+            "user_data_dir": user_data_dir,
+            "headless": headless_mode,
+            "args": [
                 "--start-maximized",
                 "--disable-blink-features=AutomationControlled",
-                "--disable-infobars"
+                "--disable-infobars",
             ],
-            ignore_https_errors=True
-        )
+            "ignore_https_errors": True,
+        }
+        try:
+            browser = await p.chromium.launch_persistent_context(**launch_kwargs, channel="chrome")
+        except Exception:
+            browser = await p.chromium.launch_persistent_context(**launch_kwargs)
         
         page = await browser.new_page()
         

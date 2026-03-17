@@ -36,17 +36,19 @@ def run_playwright_bot(project_name: str, account_id: str = "whisk_default"):
         user_data_dir = str(BASE_DIR / "data" / "sessions" / account_id / "chrome_profile")
         
         logger.info("[+] Starting Browser...")
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir,
-            headless=False,
-            args=[
+        launch_kwargs = {
+            "headless": False,
+            "args": [
                 "--start-maximized",
-                "--disable-blink-features=AutomationControlled"
+                "--disable-blink-features=AutomationControlled",
             ],
-            ignore_default_args=["--enable-automation"],
-            no_viewport=True,
-            channel="chrome"
-        )
+            "ignore_default_args": ["--enable-automation"],
+            "no_viewport": True,
+        }
+        try:
+            browser = p.chromium.launch_persistent_context(user_data_dir, **launch_kwargs, channel="chrome")
+        except Exception:
+            browser = p.chromium.launch_persistent_context(user_data_dir, **launch_kwargs)
         
         page = browser.new_page()
         page.goto("https://labs.google/fx/tools/flow/project/15964288-b22e-44b0-8b9e-981f2ac7ecae")
