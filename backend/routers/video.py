@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import List
 import os
@@ -6,9 +6,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from sqlalchemy.orm import Session
 
 from backend.core.logger import logger
 from backend.core.config import VIDEO_PROJECTS_DIR, BASE_DIR
+from backend.core.database import get_db
+from backend.models.project_config import ProjectConfig as ProjectConfigModel
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
 
@@ -132,11 +135,26 @@ async def save_project_prompts(project_name: str, req: SavePromptsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects/{project_name}/config")
-async def save_project_config(project_name: str, config: ProjectConfig):
+async def save_project_config(project_name: str, config: ProjectConfig, db: Session = Depends(get_db)):
     """Saves project configuration (topic, character, prompts settings)."""
     try:
+        row = db.query(ProjectConfigModel).filter(
+            ProjectConfigModel.name == project_name,
+            ProjectConfigModel.project_type == "video",
+        ).first()
+        if not row:
+            row = ProjectConfigModel(name=project_name, project_type="video")
+            db.add(row)
+
+        row.topic = config.topic
+        row.character = config.character
+        row.number_n = config.number_n
+        row.system_prompt = config.system_prompt
+        row.prefix = config.prefix
+        row.suffix = config.suffix
+        db.commit()
+
         config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
-        
         os.makedirs(config_file.parent, exist_ok=True)
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config.model_dump(), f, indent=4)
@@ -146,16 +164,41 @@ async def save_project_config(project_name: str, config: ProjectConfig):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/projects/{project_name}/config")
-async def get_project_config(project_name: str):
+async def get_project_config(project_name: str, db: Session = Depends(get_db)):
     """Loads project configuration."""
     try:
+        row = db.query(ProjectConfigModel).filter(
+            ProjectConfigModel.name == project_name,
+            ProjectConfigModel.project_type == "video",
+        ).first()
+        if row:
+            return ProjectConfig(
+                topic=row.topic or "",
+                character=row.character or "",
+                number_n=row.number_n or 10,
+                system_prompt=row.system_prompt or "",
+                prefix=row.prefix or "",
+                suffix=row.suffix or "",
+            ).model_dump()
+
         config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
-        
         if not config_file.exists():
             return ProjectConfig().model_dump()
-        
+
         with open(config_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            legacy = json.load(f)
+
+        parsed = ProjectConfig(**legacy)
+        row = ProjectConfigModel(name=project_name, project_type="video")
+        row.topic = parsed.topic
+        row.character = parsed.character
+        row.number_n = parsed.number_n
+        row.system_prompt = parsed.system_prompt
+        row.prefix = parsed.prefix
+        row.suffix = parsed.suffix
+        db.add(row)
+        db.commit()
+        return parsed.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

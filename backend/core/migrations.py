@@ -7,6 +7,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from sqlalchemy import inspect, text
 
 from backend.core.logger import logger
 from backend.core.database import engine
@@ -14,6 +15,7 @@ from backend.core.database import engine
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ACCOUNTS_JSON = BASE_DIR / "data" / "accounts.json"
 STATUS_JSON = BASE_DIR / "upload_queue" / "status.json"
+IS_SQLITE = engine.dialect.name == "sqlite"
 
 
 def seed_accounts_from_json(db):
@@ -87,6 +89,8 @@ def alter_accounts_add_youtube_cols():
     """Add oauth_token_json / channel_title to accounts if not present.
     Uses the raw SQLite engine directly — safe to call before any ORM query.
     """
+    if not IS_SQLITE:
+        return
     try:
         with engine.connect() as conn:
             raw = conn.connection  # raw sqlite3 Connection
@@ -106,6 +110,8 @@ def alter_accounts_add_youtube_cols():
         logger.warning(f"[Migration] Could not add YouTube columns: {e}")
 
 def remove_accounts_donut_cols():
+    if not IS_SQLITE:
+        return
     try:
         with engine.connect() as conn:
             raw = conn.connection
@@ -186,6 +192,8 @@ def remove_accounts_donut_cols():
 
 def alter_upload_queue_add_paths():
     """Add file_path and project_dir to upload_queue table if not present."""
+    if not IS_SQLITE:
+        return
     try:
         with engine.connect() as conn:
             raw = conn.connection
@@ -206,6 +214,8 @@ def alter_upload_queue_add_paths():
 
 def alter_upload_queue_add_config():
     """Add config columns to upload_queue if not present."""
+    if not IS_SQLITE:
+        return
     try:
         with engine.connect() as conn:
             raw = conn.connection
@@ -244,6 +254,23 @@ def alter_upload_queue_add_config():
                 logger.info(f"[Migration] Added upload_queue config columns: {added}")
     except Exception as e:
         logger.warning(f"[Migration] Could not add config columns to upload_queue: {e}")
+
+def alter_project_configs_add_number_n():
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            tables = set(inspector.get_table_names())
+            if "project_configs" not in tables:
+                return
+            existing = {c["name"] for c in inspector.get_columns("project_configs")}
+            if "number_n" in existing:
+                return
+            conn.execute(text("ALTER TABLE project_configs ADD COLUMN number_n INTEGER DEFAULT 10"))
+            conn.commit()
+            logger.info("[Migration] Added project_configs column: number_n")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add number_n to project_configs: {e}")
+
 def run_migrations(db):
     """Run all migrations. Called once on startup."""
     # Column migrations MUST run before any ORM queries on the models
@@ -251,6 +278,7 @@ def run_migrations(db):
     remove_accounts_donut_cols()
     alter_upload_queue_add_paths()
     alter_upload_queue_add_config()
+    alter_project_configs_add_number_n()
     seed_accounts_from_json(db)
     seed_upload_queue_from_json(db)
     logger.info("[Migration] Migration check complete.")

@@ -14,6 +14,7 @@ SESSIONS_DIR = BASE_DIR / "data" / "sessions"
 class Settings(BaseSettings):
     app_name: str = "AIO Super App API"
     environment: str = "development"
+    database_url: str = ""
     
     # Placeholder for Groq API Key (loaded from config.json or env)
     groq_api_key: str = ""

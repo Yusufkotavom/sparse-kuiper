@@ -13,6 +13,7 @@ class ProjectConfig(Base):
     project_type = Column(String, nullable=False)   # "video" | "kdp"
     topic = Column(String, default="")
     character = Column(String, default="")
+    number_n = Column(Integer, default=10)
     system_prompt = Column(Text, default="")
     prefix = Column(String, default="")
     suffix = Column(String, default="")

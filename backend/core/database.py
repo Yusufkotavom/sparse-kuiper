@@ -10,22 +10,30 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Resolve database path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
 _DEFAULT_DB = f"sqlite:///{BASE_DIR / 'nomad_hub.db'}"
-DATABASE_URL = os.environ.get("DATABASE_URL", _DEFAULT_DB)
+DATABASE_URL = os.environ.get("DATABASE_URL", _DEFAULT_DB).strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Engine options
 connect_args = {}
+engine_kwargs = {"echo": False}
 if DATABASE_URL.startswith("sqlite"):
-    # Enable WAL mode for SQLite — better concurrency, much faster writes
     connect_args = {"check_same_thread": False}
+else:
+    connect_args = {"prepare_threshold": None}
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
 
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
-    echo=False,  # Set True to log SQL queries (useful for debugging)
+    **engine_kwargs,
 )
 
 # Enable WAL mode + foreign keys for SQLite automatically
