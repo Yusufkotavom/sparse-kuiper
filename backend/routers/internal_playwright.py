@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from backend.core.config import BASE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR
+from backend.services.playwright_session_guard import check_grok_session, check_whisk_session
 
 
 router = APIRouter(prefix="/api/v1/internal/playwright", tags=["internal_playwright"])
@@ -75,6 +76,9 @@ async def run_grok_project(req: GrokRunRequest, request: Request):
         raise HTTPException(status_code=404, detail=f"Project not found: {project}")
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
+    ok, reason = check_grok_session()
+    if not ok:
+        raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 
     script = BASE_DIR / "backend" / "services" / "video_worker.py"
     if not script.exists():
@@ -108,6 +112,9 @@ async def run_whisk_project(req: WhiskRunRequest, request: Request):
         raise HTTPException(status_code=404, detail=f"Project not found: {project}")
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
+    ok, reason = check_whisk_session()
+    if not ok:
+        raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 
     script = BASE_DIR / "backend" / "services" / "bot_worker.py"
     if not script.exists():

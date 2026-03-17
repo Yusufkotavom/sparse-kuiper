@@ -12,6 +12,7 @@ from backend.core.logger import logger
 from backend.core.config import VIDEO_PROJECTS_DIR, BASE_DIR
 from backend.core.database import get_db
 from backend.models.project_config import ProjectConfig as ProjectConfigModel
+from backend.services.playwright_session_guard import check_grok_session
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
 
@@ -219,6 +220,10 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
             prompts_data = json.load(f)
         if not prompts_data or len(prompts_data) == 0:
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
+
+        ok, reason = check_grok_session()
+        if not ok:
+            raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
         
         # Run bot as a separate process
         bot_script = BASE_DIR / "backend" / "services" / "video_worker.py"
