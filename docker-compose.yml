@@ -8,10 +8,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
-      - ./backend/kuiper.db:/app/kuiper.db
-      - ./backend/config:/app/config
-      - ./backend/logs:/app/logs
+      - ./backend:/app/backend
+      - ./backend/kuiper.db:/app/backend/kuiper.db
+      - ./backend/config:/app/backend/config
+      - ./backend/logs:/app/backend/logs
       # Direktori data di petakan langsung ke folder lokal agar mudah di cek
       - ./projects:/app/projects
       - ./video_projects:/app/video_projects
@@ -19,7 +19,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - APP_ENV=local
-      - DATABASE_URL=sqlite:///./kuiper.db
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./nomad_hub.db}
     restart: always
 
   # Frontend Service (Next.js)
