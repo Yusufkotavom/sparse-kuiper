@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
 import os
@@ -44,6 +45,55 @@ class GenerateVideoRequest(BaseModel):
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
+
+
+@router.get("/thumbnail")
+async def get_video_thumbnail(file: str):
+    base = VIDEO_PROJECTS_DIR.resolve()
+    full = (VIDEO_PROJECTS_DIR / file).resolve()
+    if base not in full.parents and full != base:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    if not full.exists() or full.suffix.lower() != ".mp4":
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    candidates = [
+        full.parent / f"{full.stem}.webp",
+        full.parent / f"{full.stem}.jpg",
+        full.parent / f"{full.stem}.png",
+        full.parent / f"{full.stem}_ref.jpg",
+        full.parent / f"{full.stem}.__thumb.jpg",
+    ]
+    for p in candidates:
+        if p.exists():
+            return FileResponse(path=str(p))
+
+    thumb_path = full.parent / f"{full.stem}.__thumb.jpg"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                "00:00:01",
+                "-i",
+                str(full),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=320:-1",
+                str(thumb_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Thumbnail not available")
+
+    if not thumb_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not available")
+    return FileResponse(path=str(thumb_path))
+
 
 @router.get("/projects")
 async def list_projects():
@@ -221,7 +271,8 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
         if not prompts_data or len(prompts_data) == 0:
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
 
-        ok, reason = check_grok_session()
+        import anyio
+        ok, reason = await anyio.to_thread.run_sync(check_grok_session)
         if not ok:
             raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
         

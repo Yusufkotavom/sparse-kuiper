@@ -59,6 +59,12 @@ class AssetMetadataRequest(BaseModel):
     tags: str
 
 
+class AssetMetadataBatchRequest(BaseModel):
+    project_type: str
+    files: List[str]
+    include_sidecar: bool = True
+
+
 class AssetMoveRequest(BaseModel):
     project_type: str
     old_file: str

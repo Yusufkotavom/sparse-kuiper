@@ -76,7 +76,8 @@ async def run_grok_project(req: GrokRunRequest, request: Request):
         raise HTTPException(status_code=404, detail=f"Project not found: {project}")
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
-    ok, reason = check_grok_session()
+    import anyio
+    ok, reason = await anyio.to_thread.run_sync(check_grok_session)
     if not ok:
         raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 
@@ -112,7 +113,8 @@ async def run_whisk_project(req: WhiskRunRequest, request: Request):
         raise HTTPException(status_code=404, detail=f"Project not found: {project}")
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
-    ok, reason = check_whisk_session()
+    import anyio
+    ok, reason = await anyio.to_thread.run_sync(check_whisk_session)
     if not ok:
         raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 

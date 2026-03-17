@@ -283,7 +283,8 @@ async def trigger_kdp_generation(project_name: str):
         if not prompts_data or len(prompts_data) == 0:
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
 
-        ok, reason = check_whisk_session()
+        import anyio
+        ok, reason = await anyio.to_thread.run_sync(check_whisk_session)
         if not ok:
             raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
         
