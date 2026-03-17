@@ -40,6 +40,7 @@ def create_project(req: CreateProjectRequest):
          os.makedirs(project_dir / "raw_videos", exist_ok=True)
          os.makedirs(project_dir / "final", exist_ok=True)
          os.makedirs(project_dir / "archive", exist_ok=True)
+         os.makedirs(project_dir / "queue", exist_ok=True)
          return {"message": "Project created", "name": req.name}
     except Exception as e:
          raise HTTPException(status_code=500, detail=str(e))
@@ -196,7 +197,7 @@ def queue_project_download(
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
-    queue_dir = raw_dir / "queue"
+    queue_dir = VIDEO_PROJECTS_DIR / project_name / "queue"
     os.makedirs(queue_dir, exist_ok=True)
     
     base_name, ext = os.path.splitext(filename)

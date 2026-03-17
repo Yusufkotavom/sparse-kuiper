@@ -6,10 +6,11 @@ import os
 import json
 import shutil
 import subprocess
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from backend.core.config import UPLOAD_QUEUE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR
+from backend.core.config import UPLOAD_QUEUE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR, BASE_DIR
 from backend.core.database import get_db
 from backend.core.logger import logger
 from backend.models.upload_queue import UploadQueueItem
@@ -61,6 +62,8 @@ async def get_upload_queue(db: Session = Depends(get_db)):
         project_queue_paths = []
         vp = Path(VIDEO_PROJECTS_DIR)
         if vp.exists():
+            for p in vp.glob("*/queue/*.mp4"):
+                project_queue_paths.append(p)
             for p in vp.glob("*/*/queue/*.mp4"):
                 project_queue_paths.append(p)
         pr = Path(PROJECTS_DIR)
@@ -90,6 +93,16 @@ async def get_upload_queue(db: Session = Depends(get_db)):
             except Exception:
                 project_name = ""
                 canonical_dir = ""
+
+            if project_type == "video" and canonical_dir == "queue":
+                candidate = Path(VIDEO_PROJECTS_DIR) / project_name / "raw_videos"
+                if candidate.exists():
+                    proj_dir = str(candidate)
+            if project_type == "kdp" and canonical_dir == "queue":
+                candidate = Path(PROJECTS_DIR) / project_name / "raw_images"
+                if candidate.exists():
+                    proj_dir = str(candidate)
+
             path_contexts.append((p, fname, proj_dir, project_type, project_name, canonical_dir))
             gkey = (project_type, project_name, canonical_dir)
             if gkey not in grouped_filenames:
@@ -217,9 +230,24 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Source file not found: {src_path}")
 
     filename = os.path.basename(src_path)
-    project_dir = os.path.dirname(src_path)
+    origin_dir = Path(os.path.dirname(src_path))
 
-    queue_dir = Path(project_dir) / "queue"
+    if request.project_type == "video":
+        try:
+            rel = Path(src_path).resolve().relative_to(Path(VIDEO_PROJECTS_DIR).resolve())
+            project_name = str(rel).replace("\\", "/").split("/")[0]
+            project_root = Path(VIDEO_PROJECTS_DIR) / project_name
+        except Exception:
+            project_root = origin_dir.parent
+    else:
+        try:
+            rel = Path(src_path).resolve().relative_to(Path(PROJECTS_DIR).resolve())
+            project_name = str(rel).replace("\\", "/").split("/")[0]
+            project_root = Path(PROJECTS_DIR) / project_name
+        except Exception:
+            project_root = origin_dir.parent
+
+    queue_dir = Path(project_root) / "queue"
     queue_dir.mkdir(parents=True, exist_ok=True)
 
     base_name, ext = os.path.splitext(filename)
@@ -255,11 +283,11 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
     item.tags = request.tags
     item.platforms = {}
     item.file_path = str(dest_path)
-    item.project_dir = str(project_dir)
+    item.project_dir = str(origin_dir)
     db.commit()
 
     try:
-        sidecar_path = Path(project_dir) / f"{Path(dest_filename).stem}.meta.json"
+        sidecar_path = origin_dir / f"{Path(dest_filename).stem}.meta.json"
         with open(sidecar_path, "w", encoding="utf-8") as sf:
             json.dump({
                 "title": request.title,
@@ -295,23 +323,31 @@ async def get_queue_thumbnail(filename: str, db: Session = Depends(get_db)):
     path = Path(file_path)
     suffix = path.suffix.lower()
     if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
-        return FileResponse(str(path))
+        return FileResponse(str(path), headers={"Cache-Control": "public, max-age=86400"})
 
     if suffix != ".mp4":
         raise HTTPException(status_code=404, detail="Thumbnail not available")
 
-    candidates = [
-        path.parent / f"{path.stem}.webp",
-        path.parent / f"{path.stem}.jpg",
-        path.parent / f"{path.stem}.png",
-        path.parent / f"{path.stem}_ref.jpg",
-        path.parent / f"{path.stem}.__thumb.jpg",
-    ]
-    for c in candidates:
-        if c.exists():
-            return FileResponse(str(c))
+    cache_dir = BASE_DIR / "data" / "thumb_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        normalized = str(path).replace("\\", "/")
+        if "/video_projects/" in normalized:
+            project = normalized.split("/video_projects/", 1)[1].split("/", 1)[0] or "video"
+        elif "/projects/" in normalized:
+            project = normalized.split("/projects/", 1)[1].split("/", 1)[0] or "kdp"
+        else:
+            project = "legacy"
+        size = path.stat().st_size
+    except Exception:
+        project = "legacy"
+        size = 0
+    cache_key = f"{project}::{path.name}::{size}"
+    digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+    thumb_path = cache_dir / f"{digest}.jpg"
+    if thumb_path.exists():
+        return FileResponse(str(thumb_path), headers={"Cache-Control": "public, max-age=86400"})
 
-    thumb_path = path.parent / f"{path.stem}.__thumb.jpg"
     try:
         subprocess.run(
             [
@@ -332,11 +368,21 @@ async def get_queue_thumbnail(filename: str, db: Session = Depends(get_db)):
             check=True,
         )
     except Exception:
+        candidates = [
+            path.parent / f"{path.stem}.webp",
+            path.parent / f"{path.stem}.jpg",
+            path.parent / f"{path.stem}.png",
+            path.parent / f"{path.stem}_ref.jpg",
+            path.parent / f"{path.stem}.__thumb.jpg",
+        ]
+        for c in candidates:
+            if c.exists():
+                return FileResponse(str(c), headers={"Cache-Control": "public, max-age=86400"})
         raise HTTPException(status_code=404, detail="Thumbnail not available")
 
     if not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not available")
-    return FileResponse(str(thumb_path))
+    return FileResponse(str(thumb_path), headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.post("/queue/archive/{filename}")
@@ -350,10 +396,33 @@ async def archive_queue_item(filename: str, db: Session = Depends(get_db)):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Physical file not found")
 
-    if item.project_dir and os.path.exists(item.project_dir):
-        archive_dir = Path(item.project_dir) / "archive"
-    else:
-        archive_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / "data" / "upload_archive"
+    archive_dir: Path | None = None
+    try:
+        normalized = file_path.replace("\\", "/")
+        if "/video_projects/" in normalized:
+            after = normalized.split("/video_projects/", 1)[1]
+            project_name = after.split("/", 1)[0]
+            project_root = Path(VIDEO_PROJECTS_DIR) / project_name
+            if project_root.exists():
+                archive_dir = project_root / "archive"
+        elif "/projects/" in normalized:
+            after = normalized.split("/projects/", 1)[1]
+            project_name = after.split("/", 1)[0]
+            project_root = Path(PROJECTS_DIR) / project_name
+            if project_root.exists():
+                archive_dir = project_root / "archive"
+    except Exception:
+        archive_dir = None
+
+    if archive_dir is None:
+        if item.project_dir and os.path.exists(item.project_dir):
+            pd = Path(item.project_dir)
+            if pd.name in {"raw_videos", "final", "raw_images"}:
+                archive_dir = pd.parent / "archive"
+            else:
+                archive_dir = pd / "archive"
+        else:
+            archive_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / "data" / "upload_archive"
 
     archive_dir.mkdir(parents=True, exist_ok=True)
 
@@ -415,7 +484,15 @@ async def return_queue_item_to_project(filename: str, db: Session = Depends(get_
         if "/queue/" in normalized:
             before_queue = normalized.split("/queue/")[0]
             if os.path.exists(before_queue):
-                target_dir = Path(before_queue)
+                candidate = Path(before_queue)
+                if "/video_projects/" in normalized:
+                    raw_dir = candidate / "raw_videos"
+                    target_dir = raw_dir if raw_dir.exists() else candidate
+                elif "/projects/" in normalized:
+                    raw_dir = candidate / "raw_images"
+                    target_dir = raw_dir if raw_dir.exists() else candidate
+                else:
+                    target_dir = candidate
     if target_dir is None:
         raise HTTPException(status_code=400, detail="Project directory unavailable for this queue item")
 
@@ -462,6 +539,9 @@ async def update_queue_metadata(request: QueueUpdateRequest, db: Session = Depen
         else:
             vp = Path(VIDEO_PROJECTS_DIR)
             if vp.exists():
+                matches = list(vp.glob(f"*/queue/{request.filename}"))
+                if matches:
+                    resolved = matches[0]
                 matches = list(vp.glob(f"*/*/queue/{request.filename}"))
                 if matches:
                     resolved = matches[0]
@@ -477,7 +557,21 @@ async def update_queue_metadata(request: QueueUpdateRequest, db: Session = Depen
         item.platforms = {}
         item.file_path = str(resolved)
         try:
-            item.project_dir = str(resolved.parent.parent)
+            if resolved.parent.name == "queue":
+                if str(resolved).replace("\\", "/").startswith(str(VIDEO_PROJECTS_DIR).replace("\\", "/")):
+                    rel = resolved.relative_to(VIDEO_PROJECTS_DIR)
+                    parts = str(rel).replace("\\", "/").split("/")
+                    project_name = parts[0] if len(parts) > 0 else ""
+                    candidate = Path(VIDEO_PROJECTS_DIR) / project_name / "raw_videos"
+                    item.project_dir = str(candidate) if candidate.exists() else str(resolved.parent.parent)
+                else:
+                    rel = resolved.relative_to(PROJECTS_DIR)
+                    parts = str(rel).replace("\\", "/").split("/")
+                    project_name = parts[0] if len(parts) > 0 else ""
+                    candidate = Path(PROJECTS_DIR) / project_name / "raw_images"
+                    item.project_dir = str(candidate) if candidate.exists() else str(resolved.parent.parent)
+            else:
+                item.project_dir = str(resolved.parent.parent)
         except Exception:
             item.project_dir = ""
         db.add(item)

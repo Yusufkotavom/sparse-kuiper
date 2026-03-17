@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List
 import os
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -58,18 +59,20 @@ async def get_video_thumbnail(file: str):
     if not full.exists() or full.suffix.lower() != ".mp4":
         raise HTTPException(status_code=404, detail="Video not found")
 
-    candidates = [
-        full.parent / f"{full.stem}.webp",
-        full.parent / f"{full.stem}.jpg",
-        full.parent / f"{full.stem}.png",
-        full.parent / f"{full.stem}_ref.jpg",
-        full.parent / f"{full.stem}.__thumb.jpg",
-    ]
-    for p in candidates:
-        if p.exists():
-            return FileResponse(path=str(p))
+    cache_dir = BASE_DIR / "data" / "thumb_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        project = file.replace("\\", "/").split("/")[0] if "/" in file.replace("\\", "/") else "global"
+        size = full.stat().st_size
+    except Exception:
+        project = "global"
+        size = 0
+    cache_key = f"{project}::{full.name}::{size}"
+    digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()
+    thumb_path = cache_dir / f"{digest}.jpg"
+    if thumb_path.exists():
+        return FileResponse(path=str(thumb_path), headers={"Cache-Control": "public, max-age=86400"})
 
-    thumb_path = full.parent / f"{full.stem}.__thumb.jpg"
     try:
         subprocess.run(
             [
@@ -90,11 +93,21 @@ async def get_video_thumbnail(file: str):
             check=True,
         )
     except Exception:
+        candidates = [
+            full.parent / f"{full.stem}.webp",
+            full.parent / f"{full.stem}.jpg",
+            full.parent / f"{full.stem}.png",
+            full.parent / f"{full.stem}_ref.jpg",
+            full.parent / f"{full.stem}.__thumb.jpg",
+        ]
+        for p in candidates:
+            if p.exists():
+                return FileResponse(path=str(p), headers={"Cache-Control": "public, max-age=86400"})
         raise HTTPException(status_code=404, detail="Thumbnail not available")
 
     if not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not available")
-    return FileResponse(path=str(thumb_path))
+    return FileResponse(path=str(thumb_path), headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/projects")
@@ -119,6 +132,7 @@ async def create_project(req: CreateProjectRequest):
         os.makedirs(project_dir / "raw_videos", exist_ok=True)
         os.makedirs(project_dir / "final", exist_ok=True)
         os.makedirs(project_dir / "archive", exist_ok=True)
+        os.makedirs(project_dir / "queue", exist_ok=True)
         
         # Create an empty prompts.json
         with open(project_dir / "prompts.json", "w") as f:
@@ -338,11 +352,11 @@ async def curate_video(project_name: str, req: CurateRequest):
         
         raw_dir = project_dir / "raw_videos"
         raw_path = raw_dir / req.filename
-        raw_queue_path = raw_dir / "queue" / req.filename
+        queue_path = project_dir / "queue" / req.filename
         final_dir = project_dir / "final"
         final_path = final_dir / req.filename
         
-        source_path = raw_path if raw_path.exists() else raw_queue_path if raw_queue_path.exists() else None
+        source_path = raw_path if raw_path.exists() else queue_path if queue_path.exists() else None
         if not source_path:
             raise HTTPException(status_code=404, detail="Video not found in raw_videos")
             
@@ -373,13 +387,13 @@ async def archive_video(project_name: str, req: CurateRequest):
         # Determine source
         raw_dir = project_dir / "raw_videos"
         final_dir = project_dir / "final"
+        queue_dir = project_dir / "queue"
         raw_path = raw_dir / req.filename
-        raw_queue_path = raw_dir / "queue" / req.filename
         final_path = final_dir / req.filename
-        final_queue_path = final_dir / "queue" / req.filename
+        queue_path = queue_dir / req.filename
         
         source_path = None
-        for path in [final_path, final_queue_path, raw_path, raw_queue_path]:
+        for path in [final_path, raw_path, queue_path]:
             if path.exists():
                 source_path = path
                 break
@@ -408,16 +422,16 @@ async def move_video_stage(project_name: str, req: MoveRequest):
         raw_dir = project_dir / "raw_videos"
         final_dir = project_dir / "final"
         archive_dir = project_dir / "archive"
+        queue_dir = project_dir / "queue"
         if target not in {"raw", "final", "archive"}:
             raise HTTPException(status_code=400, detail="Invalid target_stage")
         target_dir = raw_dir if target == "raw" else final_dir if target == "final" else archive_dir
         raw_path = raw_dir / req.filename
-        raw_queue_path = raw_dir / "queue" / req.filename
         final_path = final_dir / req.filename
-        final_queue_path = final_dir / "queue" / req.filename
         archive_path = archive_dir / req.filename
+        queue_path = queue_dir / req.filename
         source_path = None
-        for path in [raw_path, raw_queue_path, final_path, final_queue_path, archive_path]:
+        for path in [raw_path, final_path, queue_path, archive_path]:
             if path.exists():
                 source_path = path
                 break
