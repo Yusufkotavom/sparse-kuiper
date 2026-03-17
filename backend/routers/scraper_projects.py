@@ -2,22 +2,17 @@ import os
 import json
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-from backend.core.config import VIDEO_PROJECTS_DIR, UPLOAD_QUEUE_DIR
+from backend.core.config import VIDEO_PROJECTS_DIR
 from backend.core.database import get_db
 from sqlalchemy.orm import Session
 import shutil
+from backend.routers.scraper_projects_schemas import (
+    CreateProjectRequest,
+    SaveScrapedDataRequest,
+    MoveQueueRequest,
+)
 
 router = APIRouter()
-
-class CreateProjectRequest(BaseModel):
-    name: str
-
-class SaveScrapedDataRequest(BaseModel):
-    videos: List[Dict[str, Any]]
-    channel: str = ""
 
 @router.get("")
 def list_projects():
@@ -188,12 +183,6 @@ def delete_project_download(project_name: str, filename: str):
         return {"message": "File deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-class MoveQueueRequest(BaseModel):
-    action: str = "copy"  # or "move"
-    title: Optional[str] = None
-    description: Optional[str] = ""
-    tags: Optional[str] = ""
 
 @router.post("/{project_name}/downloads/{filename}/queue")
 def queue_project_download(

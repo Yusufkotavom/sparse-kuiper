@@ -3,8 +3,7 @@ Accounts router — now backed by SQLite via SQLAlchemy.
 All JSON flat-file I/O has been replaced with proper ORM CRUD.
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 import os
 import sys
 import uuid
@@ -15,37 +14,23 @@ from sqlalchemy.orm import Session
 from backend.core.logger import logger
 from backend.core.database import get_db
 from backend.models.account import Account
-from backend.core.config import settings
+from backend.core.config import settings, BASE_DIR, SESSIONS_DIR
+from backend.routers.accounts_schemas import (
+    AccountModel,
+    OpenUrlPayload,
+    YoutubeConnectRequest,
+    DriveConnectRequest,
+    ExportCredsResponse,
+    ImportAccountsPayload,
+    FacebookConnectRequest,
+    FacebookSelectPageRequest,
+)
 
 router = APIRouter()
 
 # Session directories (Playwright auth)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SESSIONS_DIR = os.path.join(BASE_DIR, "data", "sessions")
-os.makedirs(SESSIONS_DIR, exist_ok=True)
-
-LOGIN_SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "services", "playwright_login.py")
-
-
-class AccountModel(BaseModel):
-    id: Optional[str] = None
-    name: str
-    platform: str   # tiktok, youtube, instagram, facebook
-    auth_method: str  # playwright, api
-    api_secret: Optional[str] = None
-    last_login: Optional[str] = None
-    status: str = "needs_login"
-    api_key: Optional[str] = None
-    tags: Optional[str] = None
-    notes: Optional[str] = None
-    browser_type: Optional[str] = "chromium"
-    proxy: Optional[str] = None
-    user_agent: Optional[str] = None
-    lightweight_mode: Optional[bool] = False
-    oauth_token_json: Optional[str] = None
-    channel_title: Optional[str] = None
-    created_at: Optional[str] = None
-    youtube_connected: Optional[bool] = None
+os.makedirs(str(SESSIONS_DIR), exist_ok=True)
+LOGIN_SCRIPT = str(BASE_DIR / "backend" / "services" / "playwright_login.py")
 
 
 @router.get("/")
@@ -57,9 +42,7 @@ async def get_accounts(db: Session = Depends(get_db)):
 @router.get("/youtube-secrets")
 async def get_youtube_secrets():
     import glob
-    from pathlib import Path
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    secrets_dir = base_dir / "config" / "youtube_secrets"
+    secrets_dir = BASE_DIR / "config" / "youtube_secrets"
     secrets = glob.glob(str(secrets_dir / "*.json"))
     return {"secrets": [os.path.basename(s) for s in secrets]}
 @router.post("/")
@@ -127,7 +110,7 @@ async def delete_account(account_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     # Optional: Delete playwright session if it exists
-    session_path = os.path.join(SESSIONS_DIR, account_id)
+    session_path = os.path.join(str(SESSIONS_DIR), account_id)
     if os.path.exists(session_path):
         import shutil
         shutil.rmtree(session_path, ignore_errors=True)
@@ -148,8 +131,8 @@ async def trigger_login(account_id: str, db: Session = Depends(get_db)):
 
         log_path = os.path.join(os.path.dirname(LOGIN_SCRIPT), "playwright_login_error.log")
         subprocess.Popen(
-            [sys.executable, LOGIN_SCRIPT, account_id, account.platform, SESSIONS_DIR],
-            cwd=BASE_DIR,
+            [sys.executable, LOGIN_SCRIPT, account_id, account.platform, str(SESSIONS_DIR)],
+            cwd=str(BASE_DIR),
             stdout=open(log_path, "w"),
             stderr=subprocess.STDOUT,
             **kwargs,
@@ -173,16 +156,13 @@ async def launch_playwright_manual(account_id: str, db: Session = Depends(get_db
     
     # Passing "true" as the 4th argument activates manual_mode in playwright_login.py
     subprocess.Popen(
-        [sys.executable, LOGIN_SCRIPT, account_id, account.platform, SESSIONS_DIR, "true"],
-        cwd=BASE_DIR,
+        [sys.executable, LOGIN_SCRIPT, account_id, account.platform, str(SESSIONS_DIR), "true"],
+        cwd=str(BASE_DIR),
         stdout=open(log_path, "a"),
         stderr=subprocess.STDOUT,
         **kwargs,
     )
     return {"message": "Browser profile opened in manual mode."}
-
-class OpenUrlPayload(BaseModel):
-    url: str
 
 @router.post("/{account_id}/refresh-status")
 async def refresh_account_status(account_id: str, db: Session = Depends(get_db)):
@@ -191,7 +171,7 @@ async def refresh_account_status(account_id: str, db: Session = Depends(get_db))
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    cookies_path = os.path.join(SESSIONS_DIR, account_id, "cookies.txt")
+    cookies_path = os.path.join(str(SESSIONS_DIR), account_id, "cookies.txt")
     if os.path.exists(cookies_path):
         account.status = "active"
         account.last_login = datetime.now()
@@ -203,10 +183,6 @@ async def refresh_account_status(account_id: str, db: Session = Depends(get_db))
 
 
 # ─── YouTube OAuth ────────────────────────────────────────────────────────────
-
-class YoutubeConnectRequest(BaseModel):
-    code: str
-
 
 @router.get("/{account_id}/youtube/auth-url")
 async def get_youtube_auth_url(account_id: str, db: Session = Depends(get_db)):
@@ -298,9 +274,6 @@ async def disconnect_youtube(account_id: str, db: Session = Depends(get_db)):
 
 # ─── Google Drive OAuth ─────────────────────────────────────────────────────────
 
-class DriveConnectRequest(BaseModel):
-    code: str
-
 @router.get("/{account_id}/drive/auth-url")
 async def get_drive_auth_url(account_id: str, db: Session = Depends(get_db)):
     account = db.query(Account).filter(Account.id == account_id).first()
@@ -352,9 +325,6 @@ async def connect_drive(account_id: str, req: DriveConnectRequest, db: Session =
         logger.error(f"[Drive OAuth] Error connecting account {account_id}: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to connect: {str(e)}")
 
-class ExportCredsResponse(BaseModel):
-    accounts: List[dict]
-
 @router.get("/export-creds", response_model=ExportCredsResponse)
 async def export_credentials(include_tokens: bool = True, db: Session = Depends(get_db)):
     rows = db.query(Account).all()
@@ -366,9 +336,6 @@ async def export_credentials(include_tokens: bool = True, db: Session = Depends(
             item["api_secret"] = acc.api_secret
         data.append(item)
     return {"accounts": data}
-
-class ImportAccountsPayload(BaseModel):
-    accounts: List[dict]
 
 @router.post("/import-creds")
 async def import_credentials(payload: ImportAccountsPayload, db: Session = Depends(get_db)):
@@ -404,12 +371,6 @@ async def import_credentials(payload: ImportAccountsPayload, db: Session = Depen
     return {"message": "Import completed", "imported": imported, "updated": updated}
 
 # ─── Facebook OAuth ────────────────────────────────────────────────────────────
-
-class FacebookConnectRequest(BaseModel):
-    code: str
-
-class FacebookSelectPageRequest(BaseModel):
-    page_id: str
 
 @router.get("/{account_id}/facebook/auth-url")
 async def get_facebook_auth_url(account_id: str, db: Session = Depends(get_db)):

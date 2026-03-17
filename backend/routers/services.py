@@ -5,7 +5,7 @@ import sys
 import os
 import signal
 import psutil
-from pathlib import Path
+from backend.core.config import BASE_DIR
 from backend.core.logger import logger
 import socket
 from typing import Dict, Any
@@ -24,16 +24,15 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(('localhost', port)) == 0
 
 def get_service_config(name: str) -> Dict[str, Any] | None:
-    base_dir = Path(__file__).resolve().parent.parent.parent
     if name == "autocrop":
         return {
             "cmd": [sys.executable, "-m", "streamlit", "run", "run.py", "--server.port", "8501", "--server.address", "localhost"],
-            "cwd": base_dir / "services" / "autocrop",
+            "cwd": BASE_DIR / "services" / "autocrop",
             "port": 8501
         }
     elif name == "kokoro":
         # Kokoro uses its own local python
-        kokoro_dir = base_dir / "services" / "kokoro_NVIDIA GPU ONLY"
+        kokoro_dir = BASE_DIR / "services" / "kokoro_NVIDIA GPU ONLY"
         return {
             "cmd": [str(kokoro_dir / "python" / "python.exe"), "scripts/gradio_v5/gradio_inf.py"],
             "cwd": kokoro_dir,
@@ -42,13 +41,13 @@ def get_service_config(name: str) -> Dict[str, Any] | None:
     elif name == "creator-studio":
         return {
             "cmd": [sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", "8502", "--server.address", "localhost"],
-            "cwd": base_dir / "services" / "Creator Studio",
+            "cwd": BASE_DIR / "services" / "Creator Studio",
             "port": 8502
         }
     elif name == "studio-test":
         return {
             "cmd": [sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", "8503", "--server.address", "localhost"],
-            "cwd": base_dir / "services" / "studio-test",
+            "cwd": BASE_DIR / "services" / "studio-test",
             "port": 8503
         }
     return None

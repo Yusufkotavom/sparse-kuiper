@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from backend.core.logger import logger
+from backend.core.config import VIDEO_PROJECTS_DIR, BASE_DIR
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
 
@@ -44,11 +45,9 @@ class BulkDeleteRequest(BaseModel):
 async def list_projects():
     """Lists all projects in the video_projects directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        projects_dir = base_dir / "video_projects"
-        if not projects_dir.exists():
+        if not VIDEO_PROJECTS_DIR.exists():
             return []
-        return [d.name for d in projects_dir.iterdir() if d.is_dir()]
+        return [d.name for d in VIDEO_PROJECTS_DIR.iterdir() if d.is_dir()]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -56,8 +55,7 @@ async def list_projects():
 async def create_project(req: CreateProjectRequest):
     """Creates a new video project directory structure."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / req.name
+        project_dir = VIDEO_PROJECTS_DIR / req.name
         
         if project_dir.exists():
             raise HTTPException(status_code=400, detail="Project already exists")
@@ -80,8 +78,7 @@ async def create_project(req: CreateProjectRequest):
 async def list_project_videos(project_name: str):
     """Lists raw and final MP4 videos for a project."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         
         raw_dir = project_dir / "raw_videos"
         final_dir = project_dir / "final"
@@ -90,9 +87,8 @@ async def list_project_videos(project_name: str):
         def get_videos(path: Path):
             if not path.exists():
                 return []
-            projects_root = base_dir / "video_projects"
             # Return relative path to match static mount point
-            return [str(f.relative_to(projects_root)).replace("\\", "/") for f in path.iterdir() if f.suffix.lower() == ".mp4"]
+            return [str(f.relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/") for f in path.iterdir() if f.suffix.lower() == ".mp4"]
 
         return {
             "raw": get_videos(raw_dir),
@@ -106,8 +102,7 @@ async def list_project_videos(project_name: str):
 async def get_project_prompts(project_name: str):
     """Loads saved prompts for a project."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        prompts_file = base_dir / "video_projects" / project_name / "prompts.json"
+        prompts_file = VIDEO_PROJECTS_DIR / project_name / "prompts.json"
         
         if not prompts_file.exists():
             return {"prompts": []}
@@ -121,15 +116,14 @@ async def get_project_prompts(project_name: str):
 async def save_project_prompts(project_name: str, req: SavePromptsRequest):
     """Saves generated prompts to the project's prompts.json."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        prompts_file = base_dir / "video_projects" / project_name / "prompts.json"
+        prompts_file = VIDEO_PROJECTS_DIR / project_name / "prompts.json"
         
         os.makedirs(prompts_file.parent, exist_ok=True)
         with open(prompts_file, "w", encoding="utf-8") as f:
             json.dump(req.prompts, f, indent=4)
             
         # Also save to visual_prompts_only.txt for compatibility with generate_grok.py logic
-        txt_file = base_dir / "video_projects" / project_name / "visual_prompts_only.txt"
+        txt_file = VIDEO_PROJECTS_DIR / project_name / "visual_prompts_only.txt"
         with open(txt_file, "w", encoding="utf-8") as f:
             f.write("\n".join(req.prompts))
             
@@ -141,8 +135,7 @@ async def save_project_prompts(project_name: str, req: SavePromptsRequest):
 async def save_project_config(project_name: str, config: ProjectConfig):
     """Saves project configuration (topic, character, prompts settings)."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        config_file = base_dir / "video_projects" / project_name / "project_config.json"
+        config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
         
         os.makedirs(config_file.parent, exist_ok=True)
         with open(config_file, "w", encoding="utf-8") as f:
@@ -156,8 +149,7 @@ async def save_project_config(project_name: str, config: ProjectConfig):
 async def get_project_config(project_name: str):
     """Loads project configuration."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        config_file = base_dir / "video_projects" / project_name / "project_config.json"
+        config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
         
         if not config_file.exists():
             return ProjectConfig().model_dump()
@@ -171,8 +163,7 @@ async def get_project_config(project_name: str):
 async def trigger_video_generation(project_name: str, req: GenerateVideoRequest):
     """Triggers the Grok Playwright bot as a separate process."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         prompts_file = project_dir / "prompts.json"
         
         if not project_dir.exists():
@@ -187,7 +178,7 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
         
         # Run bot as a separate process
-        bot_script = base_dir / "backend" / "services" / "video_worker.py"
+        bot_script = BASE_DIR / "backend" / "services" / "video_worker.py"
         
         # Detach process on Windows
         kwargs = {}
@@ -202,7 +193,7 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
                 str(req.use_reference).lower(),
                 str(req.headless_mode).lower(),
             ],
-            cwd=str(base_dir),
+            cwd=str(BASE_DIR),
             **kwargs
         )
         
@@ -218,24 +209,26 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
 async def curate_video(project_name: str, req: CurateRequest):
     """Moves a video from raw_videos to the final directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         
-        raw_path = project_dir / "raw_videos" / req.filename
+        raw_dir = project_dir / "raw_videos"
+        raw_path = raw_dir / req.filename
+        raw_queue_path = raw_dir / "queue" / req.filename
         final_dir = project_dir / "final"
         final_path = final_dir / req.filename
         
-        if not raw_path.exists():
+        source_path = raw_path if raw_path.exists() else raw_queue_path if raw_queue_path.exists() else None
+        if not source_path:
             raise HTTPException(status_code=404, detail="Video not found in raw_videos")
             
         os.makedirs(final_dir, exist_ok=True)
         try:
-            os.rename(raw_path, final_path)
+            os.rename(source_path, final_path)
         except Exception:
             try:
                 import shutil
-                shutil.copy2(raw_path, final_path)
-                os.remove(raw_path)
+                shutil.copy2(source_path, final_path)
+                os.remove(source_path)
             except Exception as ex:
                 raise HTTPException(status_code=500, detail=f"Failed to move file: {ex}")
         return {"status": "success", "message": f"Moved {req.filename} to final"}
@@ -246,22 +239,25 @@ async def curate_video(project_name: str, req: CurateRequest):
 async def archive_video(project_name: str, req: CurateRequest):
     """Moves a video from raw_videos or final to the archive directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         
         archive_dir = project_dir / "archive"
         os.makedirs(archive_dir, exist_ok=True)
         archive_path = archive_dir / req.filename
         
         # Determine source
-        raw_path = project_dir / "raw_videos" / req.filename
-        final_path = project_dir / "final" / req.filename
+        raw_dir = project_dir / "raw_videos"
+        final_dir = project_dir / "final"
+        raw_path = raw_dir / req.filename
+        raw_queue_path = raw_dir / "queue" / req.filename
+        final_path = final_dir / req.filename
+        final_queue_path = final_dir / "queue" / req.filename
         
         source_path = None
-        if final_path.exists():
-            source_path = final_path
-        elif raw_path.exists():
-            source_path = raw_path
+        for path in [final_path, final_queue_path, raw_path, raw_queue_path]:
+            if path.exists():
+                source_path = path
+                break
             
         if not source_path:
             raise HTTPException(status_code=404, detail="Video not found in project")
@@ -282,8 +278,7 @@ async def archive_video(project_name: str, req: CurateRequest):
 @router.post("/projects/{project_name}/move")
 async def move_video_stage(project_name: str, req: MoveRequest):
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         target = req.target_stage.lower()
         raw_dir = project_dir / "raw_videos"
         final_dir = project_dir / "final"
@@ -292,10 +287,12 @@ async def move_video_stage(project_name: str, req: MoveRequest):
             raise HTTPException(status_code=400, detail="Invalid target_stage")
         target_dir = raw_dir if target == "raw" else final_dir if target == "final" else archive_dir
         raw_path = raw_dir / req.filename
+        raw_queue_path = raw_dir / "queue" / req.filename
         final_path = final_dir / req.filename
+        final_queue_path = final_dir / "queue" / req.filename
         archive_path = archive_dir / req.filename
         source_path = None
-        for path in [raw_path, final_path, archive_path]:
+        for path in [raw_path, raw_queue_path, final_path, final_queue_path, archive_path]:
             if path.exists():
                 source_path = path
                 break
@@ -324,8 +321,7 @@ async def move_video_stage(project_name: str, req: MoveRequest):
 async def bulk_delete_videos(project_name: str, req: BulkDeleteRequest):
     """Bulk deletes raw and final MP4 videos for a project to save storage."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         
         raw_dir = project_dir / "raw_videos"
         final_dir = project_dir / "final"
@@ -367,8 +363,7 @@ async def delete_project(project_name: str):
     """Permanently deletes an entire video project directory."""
     import shutil
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "video_projects" / project_name
+        project_dir = VIDEO_PROJECTS_DIR / project_name
         if not project_dir.exists():
             raise HTTPException(status_code=404, detail="Project not found")
         shutil.rmtree(project_dir, ignore_errors=False)

@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
-from pydantic import BaseModel
 from typing import Optional
 import json
 import io
@@ -9,6 +8,15 @@ from backend.core.database import get_db
 from sqlalchemy.orm import Session
 from backend.models.account import Account
 from backend.core.logger import logger
+from backend.core.config import VIDEO_PROJECTS_DIR, PROJECTS_DIR
+from backend.routers.drive_schemas import (
+    ListQuery,
+    CreateFolderPayload,
+    DeletePayload,
+    MovePayload,
+    ImportToVideoProjectPayload,
+    ImportToKdpProjectPayload,
+)
 from backend.services.google_drive_service import (
     list_files,
     create_folder,
@@ -22,12 +30,6 @@ from backend.services.google_drive_service import (
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
-
-class ListQuery(BaseModel):
-    account_id: str
-    parent_id: Optional[str] = None
-    q: Optional[str] = None
-    page_token: Optional[str] = None
 
 @router.post("/list")
 async def drive_list(req: ListQuery, db: Session = Depends(get_db)):
@@ -45,10 +47,6 @@ async def drive_list(req: ListQuery, db: Session = Depends(get_db)):
         logger.error(f"[Drive] List failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class CreateFolderPayload(BaseModel):
-    account_id: str
-    name: str
-    parent_id: Optional[str] = None
 
 @router.post("/folder")
 async def drive_create_folder(req: CreateFolderPayload, db: Session = Depends(get_db)):
@@ -97,9 +95,6 @@ async def drive_download(file_id: str, account_id: str, db: Session = Depends(ge
         logger.error(f"[Drive] Download failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class DeletePayload(BaseModel):
-    account_id: str
-    file_id: str
 
 @router.post("/delete")
 async def drive_delete(req: DeletePayload, db: Session = Depends(get_db)):
@@ -117,10 +112,6 @@ async def drive_delete(req: DeletePayload, db: Session = Depends(get_db)):
         logger.error(f"[Drive] Delete failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class MovePayload(BaseModel):
-    account_id: str
-    file_id: str
-    target_parent_id: str
 
 @router.post("/move")
 async def drive_move(req: MovePayload, db: Session = Depends(get_db)):
@@ -156,16 +147,9 @@ async def drive_meta(file_id: str, account_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
 # ─── Import ke Project Lokal ───────────────────────────────────────────────────
 
-class ImportToVideoProjectPayload(BaseModel):
-    account_id: str
-    parent_id: str  # Drive folder ID
-    project_name: str
-    file_ids: Optional[list[str]] = None
-
 @router.post("/import-to-video-project")
 async def import_to_video_project(req: ImportToVideoProjectPayload, db: Session = Depends(get_db)):
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    project_dir = base_dir / "video_projects" / req.project_name.strip()
+    project_dir = VIDEO_PROJECTS_DIR / req.project_name.strip()
     raw_dir = project_dir / "raw_videos"
     final_dir = project_dir / "final"
     archive_dir = project_dir / "archive"
@@ -211,16 +195,9 @@ async def import_to_video_project(req: ImportToVideoProjectPayload, db: Session 
         logger.error(f"[Drive Import] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class ImportToKdpProjectPayload(BaseModel):
-    account_id: str
-    parent_id: str  # Drive folder ID
-    project_name: str
-    file_ids: Optional[list[str]] = None
-
 @router.post("/import-to-kdp-project")
 async def import_to_kdp_project(req: ImportToKdpProjectPayload, db: Session = Depends(get_db)):
-    base_dir = Path(__file__).resolve().parent.parent.parent
-    project_dir = base_dir / "projects" / req.project_name.strip()
+    project_dir = PROJECTS_DIR / req.project_name.strip()
     raw_dir = project_dir / "raw_images"
     final_dir = project_dir / "final"
     archive_dir = project_dir / "archive"

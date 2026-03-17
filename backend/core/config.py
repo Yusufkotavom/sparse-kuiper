@@ -9,6 +9,7 @@ CONFIG_FILE = BASE_DIR / "config.json"
 PROJECTS_DIR = BASE_DIR / "projects"
 VIDEO_PROJECTS_DIR = BASE_DIR / "video_projects"
 UPLOAD_QUEUE_DIR = BASE_DIR / "upload_queue"
+SESSIONS_DIR = BASE_DIR / "data" / "sessions"
 
 class Settings(BaseSettings):
     app_name: str = "AIO Super App API"

@@ -1,15 +1,22 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from typing import List, Optional
 import json
 from pathlib import Path
-from backend.core.config import settings
+from backend.core.config import settings, CONFIG_FILE
+from backend.routers.settings_schemas import (
+    TemplatePayload,
+    TemplateUpdatePayload,
+    LooperPreset,
+    SystemPromptPayload,
+    GroqKeyPayload,
+    OpenAIKeyPayload,
+    GeminiKeyPayload,
+    AzureOpenAIPayload,
+)
 
 from backend.core.logger import logger
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
-
-CONFIG_FILE = Path(__file__).resolve().parent.parent.parent / "config.json"
 
 VALID_CATEGORIES = ["kdp_coloring", "story", "video", "image_gen", "custom"]
 
@@ -25,74 +32,6 @@ def _read_config() -> dict:
 def _write_config(data: dict):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
-
-
-# --- Pydantic Models ---
-
-class TemplatePayload(BaseModel):
-    name: str
-    category: str = "custom"
-    system_prompt: str = ""
-    prefix: str = ""
-    suffix: str = ""
-
-
-class TemplateUpdatePayload(BaseModel):
-    category: Optional[str] = None
-    system_prompt: Optional[str] = None
-    prefix: Optional[str] = None
-    suffix: Optional[str] = None
-
-
-class LooperPreset(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    mode: str = "manual"            # manual, target, audio
-    default_loops: int = 3
-    target_duration: float = 15.0  # float to match frontend
-    cut_start: float = 3.0
-    disable_crossfade: bool = False
-    crossfade_duration: float = 1.5
-    quality: str = "high"           # high (crf18), medium (23), low (28)
-    resolution: str = "original"   # original, 1080p, 1080p_p, 720p, 720p_p, 480p, 480p_p
-
-    # Audio — names match frontend LooperPreset interface
-    mute_original_audio: bool = False
-    enable_audio_fade: bool = False
-    audio_fade_duration: float = 2.0
-
-    # Studio toggles
-    enable_looper: Optional[bool] = True
-    enable_scene_mixer: Optional[bool] = False
-
-    # Scene mixer
-    scene_mixer_source: Optional[str] = "original"
-    scene_mixer_selected_files: Optional[List[str]] = None
-    scene_mixer_clip_count: Optional[int] = 10
-    scene_mixer_order: Optional[str] = "random"
-    scene_mixer_full_duration: Optional[bool] = False
-    scene_mixer_max_duration: Optional[float] = 5.0
-
-    # Effects
-    effect_zoom_crop: Optional[bool] = False
-    effect_zoom_mode: Optional[str] = "random"
-    effect_zoom_percent: Optional[float] = 90.0
-    effect_mirror: Optional[bool] = False
-    effect_speed_ramping: Optional[bool] = False
-    effect_color_tweaking: Optional[bool] = False
-    effect_film_grain: Optional[bool] = False
-    effect_pulsing_vignette: Optional[bool] = False
-
-    # Transitions & Watermark
-    transition_type: Optional[str] = "none"
-    watermark_url: Optional[str] = None
-    watermark_scale: Optional[int] = 50
-    watermark_opacity: Optional[int] = 100
-    watermark_position: Optional[str] = "bottom_right"
-    watermark_margin_x: Optional[int] = 24
-    watermark_margin_y: Optional[int] = 24
-    watermark_key_black: Optional[bool] = False
-    watermark_key_green: Optional[bool] = False
 
 
 # --- Endpoints ---
@@ -260,10 +199,6 @@ DEFAULT_SYSTEM_PROMPTS = {
 VALID_PROMPT_KEYS = list(DEFAULT_SYSTEM_PROMPTS.keys())
 
 
-class SystemPromptPayload(BaseModel):
-    value: str
-
-
 @router.get("/system-prompts/{key}")
 async def get_system_prompt(key: str):
     """Returns a system prompt value by key."""
@@ -300,10 +235,6 @@ async def list_system_prompts():
     return result
 
 
-class GroqKeyPayload(BaseModel):
-    value: str
-
-
 @router.get("/groq-api-key")
 async def get_groq_api_key():
     config = _read_config()
@@ -323,10 +254,6 @@ async def update_groq_api_key(req: GroqKeyPayload):
     _write_config(config)
     settings.groq_api_key = req.value.strip()
     return {"status": "success"}
-
-
-class OpenAIKeyPayload(BaseModel):
-    value: str
 
 
 @router.get("/openai-api-key")
@@ -350,10 +277,6 @@ async def update_openai_api_key(req: OpenAIKeyPayload):
     return {"status": "success"}
 
 
-class GeminiKeyPayload(BaseModel):
-    value: str
-
-
 @router.get("/gemini-api-key")
 async def get_gemini_api_key():
     config = _read_config()
@@ -373,13 +296,6 @@ async def update_gemini_api_key(req: GeminiKeyPayload):
     _write_config(config)
     settings.gemini_api_key = req.value.strip()
     return {"status": "success"}
-
-
-class AzureOpenAIPayload(BaseModel):
-    endpoint: Optional[str] = None
-    api_key: Optional[str] = None
-    deployment: Optional[str] = None
-    api_version: Optional[str] = None
 
 
 @router.get("/azure-openai")

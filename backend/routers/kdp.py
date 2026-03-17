@@ -8,6 +8,7 @@ from pathlib import Path
 from backend.services.prompt_engine import generate_kdp_prompts
 from backend.services.pdf_engine import create_kdp_pdf
 from backend.services.bot_worker import run_playwright_bot
+from backend.core.config import PROJECTS_DIR, BASE_DIR
 from backend.core.logger import logger
 
 router = APIRouter(prefix="/api/v1/kdp", tags=["kdp"])
@@ -55,11 +56,9 @@ class MoveRequest(BaseModel):
 async def list_projects():
     """Lists all projects in the projects directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        projects_dir = base_dir / "projects"
-        if not projects_dir.exists():
+        if not PROJECTS_DIR.exists():
             return []
-        return [d.name for d in projects_dir.iterdir() if d.is_dir()]
+        return [d.name for d in PROJECTS_DIR.iterdir() if d.is_dir()]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,8 +66,7 @@ async def list_projects():
 async def create_project(req: CreateProjectRequest):
     """Creates a new project directory structure."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / req.name
+        project_dir = PROJECTS_DIR / req.name
         
         if project_dir.exists():
             raise HTTPException(status_code=400, detail="Project already exists")
@@ -91,8 +89,7 @@ async def create_project(req: CreateProjectRequest):
 async def list_project_images(project_name: str):
     """Lists raw and final images for a project."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         
         raw_dir = project_dir / "raw_images"
         final_dir = project_dir / "final"
@@ -101,8 +98,7 @@ async def list_project_images(project_name: str):
         def get_images(path: Path):
             if not path.exists():
                 return []
-            projects_root = base_dir / "projects"
-            return [str(f.relative_to(projects_root)).replace("\\", "/") for f in path.iterdir() if f.suffix.lower() in [".png", ".jpg", ".jpeg"]]
+            return [str(f.relative_to(PROJECTS_DIR)).replace("\\", "/") for f in path.iterdir() if f.suffix.lower() in [".png", ".jpg", ".jpeg"]]
 
         return {
             "raw": get_images(raw_dir),
@@ -116,8 +112,7 @@ async def list_project_images(project_name: str):
 async def bulk_delete_images(project_name: str, req: BulkDeleteRequest):
     """Bulk deletes raw and final images for a project to save storage."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         raw_dir = project_dir / "raw_images"
         final_dir = project_dir / "final"
 
@@ -155,8 +150,7 @@ async def delete_kdp_project(project_name: str):
     """Permanently deletes an entire KDP project directory."""
     import shutil
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         if not project_dir.exists():
             raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
         shutil.rmtree(project_dir, ignore_errors=False)
@@ -172,8 +166,7 @@ async def delete_kdp_project(project_name: str):
 async def save_project_prompts(project_name: str, req: SavePromptsRequest):
     """Saves generated prompts to the project's prompts.json."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        prompts_file = base_dir / "projects" / project_name / "prompts.json"
+        prompts_file = PROJECTS_DIR / project_name / "prompts.json"
         
         with open(prompts_file, "w", encoding="utf-8") as f:
             json.dump(req.prompts, f, indent=4)
@@ -186,8 +179,7 @@ async def save_project_prompts(project_name: str, req: SavePromptsRequest):
 async def get_project_prompts(project_name: str):
     """Loads saved prompts for a project."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        prompts_file = base_dir / "projects" / project_name / "prompts.json"
+        prompts_file = PROJECTS_DIR / project_name / "prompts.json"
         
         if not prompts_file.exists():
             return {"prompts": []}
@@ -203,8 +195,7 @@ async def get_project_prompts(project_name: str):
 async def save_project_config(project_name: str, config: ProjectConfig):
     """Saves project configuration (topic, character, prompts settings)."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        config_file = base_dir / "projects" / project_name / "project_config.json"
+        config_file = PROJECTS_DIR / project_name / "project_config.json"
         
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config.model_dump(), f, indent=4)
@@ -217,8 +208,7 @@ async def save_project_config(project_name: str, config: ProjectConfig):
 async def get_project_config(project_name: str):
     """Loads project configuration."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        config_file = base_dir / "projects" / project_name / "project_config.json"
+        config_file = PROJECTS_DIR / project_name / "project_config.json"
         
         if not config_file.exists():
             return ProjectConfig().model_dump()
@@ -235,8 +225,7 @@ async def trigger_kdp_generation(project_name: str):
     import sys
     
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         prompts_file = project_dir / "prompts.json"
         
         if not project_dir.exists():
@@ -251,7 +240,7 @@ async def trigger_kdp_generation(project_name: str):
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
         
         # Run bot as a separate process to avoid asyncio conflicts with Playwright
-        bot_script = base_dir / "backend" / "services" / "bot_worker.py"
+        bot_script = BASE_DIR / "backend" / "services" / "bot_worker.py"
         
         # Detach process on Windows so it survives Uvicorn reload
         kwargs = {}
@@ -260,7 +249,7 @@ async def trigger_kdp_generation(project_name: str):
             
         process = subprocess.Popen(
             [sys.executable, str(bot_script), project_name],
-            cwd=str(base_dir),
+            cwd=str(BASE_DIR),
             **kwargs
         )
         
@@ -275,8 +264,7 @@ async def trigger_kdp_generation(project_name: str):
 async def curate_image(project_name: str, req: CurateRequest):
     """Moves an image from raw_images to the final directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         
         raw_path = project_dir / "raw_images" / req.filename
         final_dir = project_dir / "final"
@@ -296,21 +284,24 @@ async def curate_image(project_name: str, req: CurateRequest):
 async def archive_image(project_name: str, req: CurateRequest):
     """Moves an image from raw_images or final to the archive directory."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         
         archive_dir = project_dir / "archive"
         os.makedirs(archive_dir, exist_ok=True)
         archive_path = archive_dir / req.filename
         
-        raw_path = project_dir / "raw_images" / req.filename
-        final_path = project_dir / "final" / req.filename
+        raw_dir = project_dir / "raw_images"
+        final_dir = project_dir / "final"
+        raw_path = raw_dir / req.filename
+        raw_queue_path = raw_dir / "queue" / req.filename
+        project_queue_path = project_dir / "queue" / req.filename
+        final_path = final_dir / req.filename
         
         source_path = None
-        if final_path.exists():
-            source_path = final_path
-        elif raw_path.exists():
-            source_path = raw_path
+        for path in [final_path, raw_path, raw_queue_path, project_queue_path]:
+            if path.exists():
+                source_path = path
+                break
             
         if not source_path:
             raise HTTPException(status_code=404, detail="Image not found in project")
@@ -324,8 +315,7 @@ async def archive_image(project_name: str, req: CurateRequest):
 @router.post("/projects/{project_name}/move")
 async def move_image_stage(project_name: str, req: MoveRequest):
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        project_dir = base_dir / "projects" / project_name
+        project_dir = PROJECTS_DIR / project_name
         target = req.target_stage.lower()
         raw_dir = project_dir / "raw_images"
         final_dir = project_dir / "final"
@@ -334,10 +324,12 @@ async def move_image_stage(project_name: str, req: MoveRequest):
             raise HTTPException(status_code=400, detail="Invalid target_stage")
         target_dir = raw_dir if target == "raw" else final_dir if target == "final" else archive_dir
         raw_path = raw_dir / req.filename
+        raw_queue_path = raw_dir / "queue" / req.filename
+        project_queue_path = project_dir / "queue" / req.filename
         final_path = final_dir / req.filename
         archive_path = archive_dir / req.filename
         source_path = None
-        for path in [raw_path, final_path, archive_path]:
+        for path in [raw_path, raw_queue_path, project_queue_path, final_path, archive_path]:
             if path.exists():
                 source_path = path
                 break
@@ -376,8 +368,7 @@ async def create_prompts(req: PromptRequest):
 async def compile_pdf(req: PdfRequest):
     """Weaves images into a final KDP-ready PDF."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        output_dir = base_dir / "projects" / req.project_name / "final"
+        output_dir = PROJECTS_DIR / req.project_name / "final"
         filename = f"{req.project_name}_KDP_Format.pdf"
         
         pdf_path = create_kdp_pdf(
