@@ -21,4 +21,5 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - APP_ENV=local
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./nomad_hub.db}
     restart: unless-stopped
