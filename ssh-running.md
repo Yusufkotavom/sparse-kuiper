@@ -77,6 +77,25 @@ docker compose up -d --build
 docker compose ps
 ```
 
+Penting (Playwright sessions):
+- Backend container menggunakan `SESSIONS_DIR=/app/data/sessions`
+- Session login yang kamu buat di server akan ada di `/opt/sparse-kuiper/data/sessions`
+- Jadi `docker-compose.yml` harus memetakan folder `./data` ke `/app/data`:
+
+```yml
+services:
+  backend:
+    volumes:
+      - ./data:/app/data
+```
+
+Setelah edit compose, apply:
+
+```bash
+cd /opt/sparse-kuiper
+docker compose up -d --build backend
+```
+
 Catatan port default (berdasarkan docker-compose.yml):
 - Backend: `8001 -> 8000` (FastAPI)
 - Frontend: `3000 -> 3000` (Next.js)

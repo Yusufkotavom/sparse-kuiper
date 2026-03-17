@@ -16,6 +16,7 @@ services:
       - ./projects:/app/projects
       - ./video_projects:/app/video_projects
       - ./upload_queue:/app/upload_queue
+      - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
       - APP_ENV=local

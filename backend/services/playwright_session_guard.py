@@ -41,16 +41,19 @@ def check_grok_session(account_id: str, timeout_ms: int = 12000, headless: bool 
 
     try:
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=str(profile_dir),
-                headless=headless,
-                channel="chrome",
-                args=[
+            launch_kwargs = {
+                "user_data_dir": str(profile_dir),
+                "headless": headless,
+                "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-infobars",
                 ],
-                ignore_https_errors=True,
-            )
+                "ignore_https_errors": True,
+            }
+            try:
+                context = p.chromium.launch_persistent_context(**launch_kwargs, channel="chrome")
+            except Exception:
+                context = p.chromium.launch_persistent_context(**launch_kwargs)
             try:
                 page = context.new_page()
                 page.goto("https://grok.com/imagine", wait_until="domcontentloaded", timeout=timeout_ms)
@@ -82,18 +85,21 @@ def check_whisk_session(account_id: str, timeout_ms: int = 12000, headless: bool
 
     try:
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=str(profile_dir),
-                headless=headless,
-                channel="chrome",
-                args=[
+            launch_kwargs = {
+                "user_data_dir": str(profile_dir),
+                "headless": headless,
+                "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-infobars",
                 ],
-                ignore_default_args=["--enable-automation"],
-                no_viewport=True,
-                ignore_https_errors=True,
-            )
+                "ignore_default_args": ["--enable-automation"],
+                "no_viewport": True,
+                "ignore_https_errors": True,
+            }
+            try:
+                context = p.chromium.launch_persistent_context(**launch_kwargs, channel="chrome")
+            except Exception:
+                context = p.chromium.launch_persistent_context(**launch_kwargs)
             try:
                 page = context.new_page()
                 page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=timeout_ms)

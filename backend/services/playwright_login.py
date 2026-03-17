@@ -145,9 +145,11 @@ def run_login(account_id: str, platform: str, sessions_dir: str, manual_mode: bo
             user_data_dir = os.path.join(session_dir, "chrome_profile")
             os.makedirs(user_data_dir, exist_ok=True)
             kwargs["user_data_dir"] = user_data_dir
-            kwargs["channel"] = "chrome"
             kwargs["ignore_default_args"] = ["--enable-automation"]
-            context = p.chromium.launch_persistent_context(**kwargs)
+            try:
+                context = p.chromium.launch_persistent_context(**kwargs, channel="chrome")
+            except Exception:
+                context = p.chromium.launch_persistent_context(**kwargs)
         page = context.new_page()
         page.goto(url)
 
