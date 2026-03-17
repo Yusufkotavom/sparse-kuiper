@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: sparse-kuiper-backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./backend:/app/backend
       - ./backend/kuiper.db:/app/backend/kuiper.db
@@ -36,7 +36,7 @@ services:
       - /app/.next
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8001
     depends_on:
       - backend
     restart: always
