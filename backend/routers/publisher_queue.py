@@ -165,6 +165,25 @@ async def get_upload_queue(db: Session = Depends(get_db)):
     return {"queue": queue}
 
 
+@router.get("/queue/published", response_model=Dict[str, Any])
+async def get_published_history(db: Session = Depends(get_db)):
+    items = db.query(UploadQueueItem).all()
+    records = []
+    for item in items:
+        row = item.to_dict()
+        platforms = row.get("platforms") or {}
+        has_history = (
+            row.get("uploaded_at") is not None
+            or row.get("status") in {"completed", "completed_with_errors", "failed", "archived"}
+            or (row.get("attempt_count") or 0) > 0
+            or (row.get("worker_state") or "pending") != "pending"
+            or len(platforms) > 0
+        )
+        if has_history:
+            records.append(row)
+    return {"queue": records}
+
+
 @router.delete("/queue/{filename}")
 async def delete_from_queue(filename: str, db: Session = Depends(get_db)):
     item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == filename).first()
