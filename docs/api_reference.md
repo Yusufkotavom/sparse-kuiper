@@ -1,4 +1,4 @@
-﻿# API Reference (Latest)
+# API Reference (Latest)
 
 Base URL lokal: `http://localhost:8000/api/v1`
 
@@ -42,6 +42,7 @@ Sumber kebenaran utama schema request/response ada di Swagger: `http://localhost
 - `POST /api/v1/video/projects/{project_name}/curate`
 - `POST /api/v1/video/projects/{project_name}/archive`
 - `POST /api/v1/video/projects/{project_name}/move`
+- `GET /api/v1/video/thumbnail?file=<relative_path>`
 
 ## KDP
 - `GET /api/v1/kdp/projects`
@@ -79,11 +80,13 @@ Sumber kebenaran utama schema request/response ada di Swagger: `http://localhost
 
 ## Publisher
 - `GET /api/v1/publisher/queue`
+- `GET /api/v1/publisher/queue/published`
 - `POST /api/v1/publisher/queue/add`
 - `DELETE /api/v1/publisher/queue/{filename}`
 - `POST /api/v1/publisher/queue/archive/{filename}`
 - `POST /api/v1/publisher/queue/return/{filename}`
 - `GET /api/v1/publisher/queue/video/{filename}`
+- `GET /api/v1/publisher/queue/thumbnail/{filename}`
 - `POST /api/v1/publisher/queue/update-metadata`
 - `POST /api/v1/publisher/queue/update-config`
 - `POST /api/v1/publisher/queue/bulk-update-config`
@@ -92,6 +95,7 @@ Sumber kebenaran utama schema request/response ada di Swagger: `http://localhost
 - `POST /api/v1/publisher/generate-metadata`
 - `GET /api/v1/publisher/metadata/sidecar`
 - `GET /api/v1/publisher/assets/metadata`
+- `POST /api/v1/publisher/assets/metadata/batch`
 - `POST /api/v1/publisher/assets/metadata`
 - `POST /api/v1/publisher/assets/move`
 - `GET /api/v1/publisher/jobs`

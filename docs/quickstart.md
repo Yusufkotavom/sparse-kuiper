@@ -52,3 +52,14 @@ npm run build
 # backend (dari root)
 python -m compileall backend
 ```
+
+## Validasi fitur Publisher (disarankan)
+- Buka `http://localhost:3000/queue` lalu pastikan item queue tampil dan thumbnail muncul.
+- Buka `http://localhost:3000/publisher` untuk trigger upload single/bulk.
+- Buka `http://localhost:3000/published` untuk konfirmasi status sukses/gagal per platform.
+
+## Validasi fitur rotasi akun Grok/Whisk
+- Login akun Grok/Whisk lewat `http://localhost:3000/accounts`.
+- Simpan pilihan akun per project di:
+  - `http://localhost:3000/video/ideation` (Grok Account)
+  - `http://localhost:3000/kdp/ideation` (Whisk Account)

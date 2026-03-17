@@ -1,4 +1,4 @@
-﻿# Operations Runbook
+# Operations Runbook
 
 ## Startup Lokal
 ```bash
@@ -26,6 +26,20 @@ npm run build
 - Queue item tidak muncul: cek folder `video_projects/*/*/queue` atau `upload_queue`.
 - Upload gagal auth: cek `data/sessions/<account_id>/cookies.txt` atau OAuth token account.
 - Static media 404: verifikasi path relatif project dan mount static di `backend/main.py`.
+
+## Published & Konfirmasi Upload
+- Halaman `/published` mengambil histori dari endpoint `GET /api/v1/publisher/queue/published`.
+- Status upload per platform dibaca dari `platforms.<platform>.status` (`success`/`failed`).
+- Detail hasil worker tampil di `platforms.<platform>.message` dan `last_error` (jika ada).
+- Untuk upload TikTok Playwright, hasil akhir diambil dari file `data/upload_jobs/*_result.json` lalu disimpan ke DB queue.
+
+## Rotasi Akun Grok/Whisk
+- Session setiap akun menggunakan folder: `data/sessions/<account_id>/chrome_profile`.
+- Login manual akun dilakukan dari halaman `/accounts` untuk akun platform `grok` / `whisk`.
+- Pilihan akun generator ada di:
+  - `/video/ideation` → `Grok Account`
+  - `/kdp/ideation` → `Whisk Account`
+- Jika project belum memilih akun, backend fallback ke akun aktif terbaru untuk platform terkait.
 
 ## Lokasi Data Runtime
 - `video_projects/`

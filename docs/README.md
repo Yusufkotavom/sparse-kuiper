@@ -39,4 +39,7 @@ sparse-kuiper/
 ## Catatan Penting
 - Router `publisher` sudah dipecah modular: queue, uploads, metadata, assets, jobs.
 - Beberapa router besar juga sudah dipecah skema request ke file `*_schemas.py`.
+- Endpoint histori publish terpisah dari queue aktif: `GET /api/v1/publisher/queue/published`.
+- Queue list menggunakan endpoint thumbnail: `GET /api/v1/publisher/queue/thumbnail/{filename}`.
+- Rotasi akun generator Grok/Whisk berbasis profile per akun di `data/sessions/<account_id>/chrome_profile`.
 - Untuk endpoint terkini, selalu jadikan `GET /docs` dan [api_reference.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/api_reference.md) sebagai sumber utama.
