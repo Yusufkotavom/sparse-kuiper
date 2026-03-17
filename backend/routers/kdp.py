@@ -13,6 +13,7 @@ from backend.core.config import PROJECTS_DIR, BASE_DIR
 from backend.core.logger import logger
 from backend.core.database import get_db
 from backend.models.project_config import ProjectConfig as ProjectConfigModel
+from backend.models.account import Account
 from backend.services.playwright_session_guard import check_whisk_session
 
 router = APIRouter(prefix="/api/v1/kdp", tags=["kdp"])
@@ -38,6 +39,7 @@ class ProjectConfig(BaseModel):
     system_prompt: str = ""
     prefix: str = ""
     suffix: str = ""
+    whisk_account_id: str = ""
 
 class PdfRequest(BaseModel):
     project_name: str
@@ -213,6 +215,7 @@ async def save_project_config(project_name: str, config: ProjectConfig, db: Sess
         row.system_prompt = config.system_prompt
         row.prefix = config.prefix
         row.suffix = config.suffix
+        row.whisk_account_id = config.whisk_account_id
         db.commit()
 
         config_file = PROJECTS_DIR / project_name / "project_config.json"
@@ -239,6 +242,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
                 system_prompt=row.system_prompt or "",
                 prefix=row.prefix or "",
                 suffix=row.suffix or "",
+                whisk_account_id=row.whisk_account_id or "",
             ).model_dump()
 
         config_file = PROJECTS_DIR / project_name / "project_config.json"
@@ -256,6 +260,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
         row.system_prompt = parsed.system_prompt
         row.prefix = parsed.prefix
         row.suffix = parsed.suffix
+        row.whisk_account_id = parsed.whisk_account_id
         db.add(row)
         db.commit()
         return parsed.model_dump()
@@ -263,7 +268,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects/{project_name}/generate")
-async def trigger_kdp_generation(project_name: str):
+async def trigger_kdp_generation(project_name: str, db: Session = Depends(get_db)):
     """Triggers the Playwright bot as a separate process."""
     import subprocess
     import sys
@@ -283,8 +288,28 @@ async def trigger_kdp_generation(project_name: str):
         if not prompts_data or len(prompts_data) == 0:
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
 
+        cfg = db.query(ProjectConfigModel).filter(
+            ProjectConfigModel.name == project_name,
+            ProjectConfigModel.project_type == "kdp",
+        ).first()
+        whisk_account_id = (cfg.whisk_account_id if cfg else "") or ""
+        if not whisk_account_id:
+            active = db.query(Account).filter(
+                Account.platform == "whisk",
+                Account.auth_method == "playwright",
+                Account.status == "active",
+            ).order_by(Account.last_login.desc().nullslast()).first()
+            if active:
+                whisk_account_id = active.id
+            else:
+                any_whisk = db.query(Account).filter(
+                    Account.platform == "whisk",
+                    Account.auth_method == "playwright",
+                ).order_by(Account.last_login.desc().nullslast()).first()
+                whisk_account_id = any_whisk.id if any_whisk else "whisk_default"
+
         import anyio
-        ok, reason = await anyio.to_thread.run_sync(check_whisk_session)
+        ok, reason = await anyio.to_thread.run_sync(check_whisk_session, whisk_account_id)
         if not ok:
             raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
         
@@ -297,13 +322,13 @@ async def trigger_kdp_generation(project_name: str):
             kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
             
         process = subprocess.Popen(
-            [sys.executable, str(bot_script), project_name],
+            [sys.executable, str(bot_script), project_name, whisk_account_id],
             cwd=str(BASE_DIR),
             **kwargs
         )
         
-        logger.info(f"[API] Bot process started (PID {process.pid}) for: {project_name} ({len(prompts_data)} prompts)")
-        return {"status": "success", "message": f"Bot started for '{project_name}' with {len(prompts_data)} prompts (PID: {process.pid}). A Chrome window should open shortly."}
+        logger.info(f"[API] Bot process started (PID {process.pid}) for: {project_name} ({len(prompts_data)} prompts) account={whisk_account_id}")
+        return {"status": "success", "message": f"Bot started for '{project_name}' with {len(prompts_data)} prompts (PID: {process.pid}). account_id={whisk_account_id}. A Chrome window should open shortly."}
     except HTTPException:
         raise
     except Exception as e:

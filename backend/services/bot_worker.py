@@ -17,7 +17,7 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"
 
-def run_playwright_bot(project_name: str):
+def run_playwright_bot(project_name: str, account_id: str = "whisk_default"):
     """
     Runs the Playwright bot to generate images in Google Flow.
     This should ideally be called as a background task.
@@ -33,7 +33,7 @@ def run_playwright_bot(project_name: str):
         raise FileNotFoundError(f"File '{prompts_file}' tidak ditemukan.")
 
     with sync_playwright() as p:
-        user_data_dir = os.path.join(os.getcwd(), "chrome_profile")
+        user_data_dir = str(BASE_DIR / "data" / "sessions" / account_id / "chrome_profile")
         
         logger.info("[+] Starting Browser...")
         browser = p.chromium.launch_persistent_context(
@@ -139,8 +139,9 @@ def run_playwright_bot(project_name: str):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python bot_worker.py <project_name>")
+        print("Usage: python bot_worker.py <project_name> [account_id]")
         sys.exit(1)
     project_name = sys.argv[1]
+    account_id = sys.argv[2] if len(sys.argv) > 2 else "whisk_default"
     logger.info(f"[BOT] Running standalone for project: {project_name}")
-    run_playwright_bot(project_name)
+    run_playwright_bot(project_name, account_id)

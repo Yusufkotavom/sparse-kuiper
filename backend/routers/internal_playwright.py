@@ -51,10 +51,12 @@ class GrokRunRequest(BaseModel):
     project_name: str
     use_reference: bool = True
     headless_mode: bool = True
+    account_id: str = "grok_default"
 
 
 class WhiskRunRequest(BaseModel):
     project_name: str
+    account_id: str = "whisk_default"
 
 
 class ProbeRequest(BaseModel):
@@ -77,7 +79,8 @@ async def run_grok_project(req: GrokRunRequest, request: Request):
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
     import anyio
-    ok, reason = await anyio.to_thread.run_sync(check_grok_session)
+    account_id = (req.account_id or "").strip() or "grok_default"
+    ok, reason = await anyio.to_thread.run_sync(check_grok_session, account_id)
     if not ok:
         raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 
@@ -94,6 +97,7 @@ async def run_grok_project(req: GrokRunRequest, request: Request):
             project,
             str(req.use_reference).lower(),
             str(req.headless_mode).lower(),
+            account_id,
         ],
         cwd=str(BASE_DIR),
         **kwargs,
@@ -114,7 +118,8 @@ async def run_whisk_project(req: WhiskRunRequest, request: Request):
     if not prompts_file.exists():
         raise HTTPException(status_code=400, detail="prompts.json not found")
     import anyio
-    ok, reason = await anyio.to_thread.run_sync(check_whisk_session)
+    account_id = (req.account_id or "").strip() or "whisk_default"
+    ok, reason = await anyio.to_thread.run_sync(check_whisk_session, account_id)
     if not ok:
         raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
 
@@ -124,7 +129,7 @@ async def run_whisk_project(req: WhiskRunRequest, request: Request):
     kwargs = {}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    proc = subprocess.Popen([sys.executable, str(script), project], cwd=str(BASE_DIR), **kwargs)
+    proc = subprocess.Popen([sys.executable, str(script), project, account_id], cwd=str(BASE_DIR), **kwargs)
     return {"status": "queued", "pid": proc.pid, "project": project, "worker": "whisk_flow_worker"}
 
 

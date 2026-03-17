@@ -17,6 +17,8 @@ class ProjectConfig(Base):
     system_prompt = Column(Text, default="")
     prefix = Column(String, default="")
     suffix = Column(String, default="")
+    grok_account_id = Column(String, default="")
+    whisk_account_id = Column(String, default="")
     _prompts_json = Column("prompts_json", Text, default="[]")  # JSON array of strings
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

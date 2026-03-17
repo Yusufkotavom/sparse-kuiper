@@ -19,6 +19,9 @@ from datetime import datetime
 from pathlib import Path
 
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -37,6 +40,8 @@ LOGIN_URL_FRAGMENTS = {
     "instagram": ["accounts/login", "accounts/emailsignup"],
     "facebook": ["/login", "/r.php"],
     "youtube": ["accounts.google.com/signin", "accounts.google.com/o/oauth2"],
+    "grok": ["login", "signin", "signup"],
+    "whisk": ["accounts.google.com", "signin"],
 }
 
 
@@ -67,6 +72,8 @@ def run_login(account_id: str, platform: str, sessions_dir: str, manual_mode: bo
         "instagram": "https://www.instagram.com/accounts/login/",
         "facebook": "https://www.facebook.com/login",
         "youtube": "https://accounts.google.com/signin",
+        "grok": "https://grok.com/imagine",
+        "whisk": "https://labs.google/fx/tools/flow",
     }
     url = login_urls.get(platform, "https://google.com")
 

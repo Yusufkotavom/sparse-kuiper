@@ -13,6 +13,7 @@ from backend.core.logger import logger
 from backend.core.config import VIDEO_PROJECTS_DIR, BASE_DIR
 from backend.core.database import get_db
 from backend.models.project_config import ProjectConfig as ProjectConfigModel
+from backend.models.account import Account
 from backend.services.playwright_session_guard import check_grok_session
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
@@ -28,6 +29,7 @@ class ProjectConfig(BaseModel):
     system_prompt: str = ""
     prefix: str = ""
     suffix: str = ""
+    grok_account_id: str = ""
 
 class CreateProjectRequest(BaseModel):
     name: str
@@ -203,6 +205,7 @@ async def save_project_config(project_name: str, config: ProjectConfig, db: Sess
         row.system_prompt = config.system_prompt
         row.prefix = config.prefix
         row.suffix = config.suffix
+        row.grok_account_id = config.grok_account_id
         db.commit()
 
         config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
@@ -230,6 +233,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
                 system_prompt=row.system_prompt or "",
                 prefix=row.prefix or "",
                 suffix=row.suffix or "",
+                grok_account_id=row.grok_account_id or "",
             ).model_dump()
 
         config_file = VIDEO_PROJECTS_DIR / project_name / "project_config.json"
@@ -247,6 +251,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
         row.system_prompt = parsed.system_prompt
         row.prefix = parsed.prefix
         row.suffix = parsed.suffix
+        row.grok_account_id = parsed.grok_account_id
         db.add(row)
         db.commit()
         return parsed.model_dump()
@@ -254,7 +259,7 @@ async def get_project_config(project_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/projects/{project_name}/generate")
-async def trigger_video_generation(project_name: str, req: GenerateVideoRequest):
+async def trigger_video_generation(project_name: str, req: GenerateVideoRequest, db: Session = Depends(get_db)):
     """Triggers the Grok Playwright bot as a separate process."""
     try:
         project_dir = VIDEO_PROJECTS_DIR / project_name
@@ -271,8 +276,28 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
         if not prompts_data or len(prompts_data) == 0:
             raise HTTPException(status_code=400, detail="prompts.json is empty. Generate and save prompts first.")
 
+        cfg = db.query(ProjectConfigModel).filter(
+            ProjectConfigModel.name == project_name,
+            ProjectConfigModel.project_type == "video",
+        ).first()
+        grok_account_id = (cfg.grok_account_id if cfg else "") or ""
+        if not grok_account_id:
+            active = db.query(Account).filter(
+                Account.platform == "grok",
+                Account.auth_method == "playwright",
+                Account.status == "active",
+            ).order_by(Account.last_login.desc().nullslast()).first()
+            if active:
+                grok_account_id = active.id
+            else:
+                any_grok = db.query(Account).filter(
+                    Account.platform == "grok",
+                    Account.auth_method == "playwright",
+                ).order_by(Account.last_login.desc().nullslast()).first()
+                grok_account_id = any_grok.id if any_grok else "grok_default"
+
         import anyio
-        ok, reason = await anyio.to_thread.run_sync(check_grok_session)
+        ok, reason = await anyio.to_thread.run_sync(check_grok_session, grok_account_id)
         if not ok:
             raise HTTPException(status_code=409, detail=f"session expired, re-login required ({reason})")
         
@@ -291,13 +316,14 @@ async def trigger_video_generation(project_name: str, req: GenerateVideoRequest)
                 project_name,
                 str(req.use_reference).lower(),
                 str(req.headless_mode).lower(),
+                grok_account_id,
             ],
             cwd=str(BASE_DIR),
             **kwargs
         )
         
-        logger.info(f"[Video API] Grok Bot process started (PID {process.pid}) for: {project_name}")
-        return {"status": "success", "message": f"Grok Bot started for '{project_name}'. PID: {process.pid}."}
+        logger.info(f"[Video API] Grok Bot process started (PID {process.pid}) for: {project_name} account={grok_account_id}")
+        return {"status": "success", "message": f"Grok Bot started for '{project_name}'. PID: {process.pid}. account_id={grok_account_id}"}
     except HTTPException:
         raise
     except Exception as e:

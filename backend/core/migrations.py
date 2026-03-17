@@ -271,6 +271,28 @@ def alter_project_configs_add_number_n():
     except Exception as e:
         logger.warning(f"[Migration] Could not add number_n to project_configs: {e}")
 
+
+def alter_project_configs_add_accounts():
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            tables = set(inspector.get_table_names())
+            if "project_configs" not in tables:
+                return
+            existing = {c["name"] for c in inspector.get_columns("project_configs")}
+            statements = []
+            if "grok_account_id" not in existing:
+                statements.append("ALTER TABLE project_configs ADD COLUMN grok_account_id VARCHAR DEFAULT ''")
+            if "whisk_account_id" not in existing:
+                statements.append("ALTER TABLE project_configs ADD COLUMN whisk_account_id VARCHAR DEFAULT ''")
+            for stmt in statements:
+                conn.execute(text(stmt))
+            if statements:
+                conn.commit()
+                logger.info("[Migration] Added project_configs columns: grok_account_id, whisk_account_id")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add grok/whisk accounts to project_configs: {e}")
+
 def run_migrations(db):
     """Run all migrations. Called once on startup."""
     # Column migrations MUST run before any ORM queries on the models
@@ -279,6 +301,7 @@ def run_migrations(db):
     alter_upload_queue_add_paths()
     alter_upload_queue_add_config()
     alter_project_configs_add_number_n()
+    alter_project_configs_add_accounts()
     seed_accounts_from_json(db)
     seed_upload_queue_from_json(db)
     logger.info("[Migration] Migration check complete.")

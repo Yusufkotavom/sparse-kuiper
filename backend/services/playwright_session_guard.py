@@ -5,8 +5,7 @@ from typing import Tuple
 
 from playwright.sync_api import sync_playwright
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-PROFILE_DIR = BASE_DIR / "chrome_profile"
+from backend.core.config import SESSIONS_DIR
 
 _CACHE_LOCK = Lock()
 _CACHE: dict[str, tuple[float, bool, str]] = {}
@@ -30,18 +29,20 @@ def _set_cached(key: str, ok: bool, reason: str) -> None:
         _CACHE[key] = (time.time(), ok, reason)
 
 
-def check_grok_session(timeout_ms: int = 12000, headless: bool = True) -> Tuple[bool, str]:
-    if not PROFILE_DIR.exists():
-        return False, "chrome_profile belum ada di server"
+def check_grok_session(account_id: str, timeout_ms: int = 12000, headless: bool = True) -> Tuple[bool, str]:
+    profile_dir = Path(SESSIONS_DIR) / account_id / "chrome_profile"
+    if not profile_dir.exists():
+        return False, f"chrome_profile belum ada untuk account_id='{account_id}' di '{profile_dir}'"
 
-    cached = _get_cached("grok", ttl_ok_s=600, ttl_fail_s=60)
+    cache_key = f"grok:{account_id}"
+    cached = _get_cached(cache_key, ttl_ok_s=600, ttl_fail_s=60)
     if cached is not None:
         return cached
 
     try:
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
-                user_data_dir=str(PROFILE_DIR),
+                user_data_dir=str(profile_dir),
                 headless=headless,
                 channel="chrome",
                 args=[
@@ -59,29 +60,30 @@ def check_grok_session(timeout_ms: int = 12000, headless: bool = True) -> Tuple[
                 context.close()
 
         if "login" in current_url or "signin" in current_url or "signup" in current_url:
-            _set_cached("grok", False, "session expired, re-login required")
+            _set_cached(cache_key, False, "session expired, re-login required")
             return False, "session expired, re-login required"
-
-        _set_cached("grok", True, "ok")
+        _set_cached(cache_key, True, "ok")
         return True, "ok"
     except Exception as e:
         reason = f"login check error: {e}"
-        _set_cached("grok", False, reason)
+        _set_cached(cache_key, False, reason)
         return False, reason
 
 
-def check_whisk_session(timeout_ms: int = 12000, headless: bool = True) -> Tuple[bool, str]:
-    if not PROFILE_DIR.exists():
-        return False, "chrome_profile belum ada di server"
+def check_whisk_session(account_id: str, timeout_ms: int = 12000, headless: bool = True) -> Tuple[bool, str]:
+    profile_dir = Path(SESSIONS_DIR) / account_id / "chrome_profile"
+    if not profile_dir.exists():
+        return False, f"chrome_profile belum ada untuk account_id='{account_id}' di '{profile_dir}'"
 
-    cached = _get_cached("whisk", ttl_ok_s=600, ttl_fail_s=60)
+    cache_key = f"whisk:{account_id}"
+    cached = _get_cached(cache_key, ttl_ok_s=600, ttl_fail_s=60)
     if cached is not None:
         return cached
 
     try:
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
-                user_data_dir=str(PROFILE_DIR),
+                user_data_dir=str(profile_dir),
                 headless=headless,
                 channel="chrome",
                 args=[
@@ -101,12 +103,11 @@ def check_whisk_session(timeout_ms: int = 12000, headless: bool = True) -> Tuple
                 context.close()
 
         if "accounts.google.com" in current_url or "signin" in current_url:
-            _set_cached("whisk", False, "session expired, re-login required")
+            _set_cached(cache_key, False, "session expired, re-login required")
             return False, "session expired, re-login required"
-
-        _set_cached("whisk", True, "ok")
+        _set_cached(cache_key, True, "ok")
         return True, "ok"
     except Exception as e:
         reason = f"login check error: {e}"
-        _set_cached("whisk", False, reason)
+        _set_cached(cache_key, False, reason)
         return False, reason

@@ -36,6 +36,41 @@ LOGIN_SCRIPT = str(BASE_DIR / "backend" / "services" / "playwright_login.py")
 @router.get("/")
 async def get_accounts(db: Session = Depends(get_db)):
     accounts = db.query(Account).all()
+    platforms = {acc.platform for acc in accounts}
+
+    created = False
+    if "grok" not in platforms:
+        grok_acc = Account(
+            id="grok_default",
+            name="Grok Imagine",
+            platform="grok",
+            auth_method="playwright",
+            status="needs_login",
+            tags="internal,grok",
+            notes="Session untuk grok.com imagine editor",
+            browser_type="chromium",
+        )
+        db.add(grok_acc)
+        created = True
+
+    if "whisk" not in platforms:
+        whisk_acc = Account(
+            id="whisk_default",
+            name="Google Flow (Whisk)",
+            platform="whisk",
+            auth_method="playwright",
+            status="needs_login",
+            tags="internal,whisk",
+            notes="Session untuk labs.google/fx/tools/flow",
+            browser_type="chromium",
+        )
+        db.add(whisk_acc)
+        created = True
+
+    if created:
+        db.commit()
+        accounts = db.query(Account).all()
+
     return {"accounts": [acc.to_dict(mask_secret=True) for acc in accounts]}
 
 

@@ -33,14 +33,14 @@ def log_message(project_dir, message, is_error=False):
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(formatted_msg + "\n")
 
-async def process_grok_project(project_name, project_dir, p, profile_name="Profile_Grok_1", use_reference=True, headless_mode=True):
+async def process_grok_project(project_name, project_dir, p, account_id="grok_default", profile_name="Profile_Grok_1", use_reference=True, headless_mode=True):
     prompts_file = os.path.join(project_dir, "prompts.json")
     download_dir = os.path.join(project_dir, "raw_videos")
     log_dir = project_dir
     
-    # Profile terpusat di chrome_profile (sama dengan bot gambar kdp)
+    # Profile per akun di data/sessions/<account_id>/chrome_profile
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    user_data_dir = os.path.join(base_dir, "chrome_profile")
+    user_data_dir = os.path.join(base_dir, "data", "sessions", account_id, "chrome_profile")
     
     os.makedirs(download_dir, exist_ok=True)
     os.makedirs(os.path.dirname(user_data_dir), exist_ok=True)
@@ -246,7 +246,7 @@ async def process_grok_project(project_name, project_dir, p, profile_name="Profi
         if 'browser' in locals():
             await browser.close()
 
-async def run_grok_bot(project_name, use_reference=True, headless_mode=True):
+async def run_grok_bot(project_name, use_reference=True, headless_mode=True, account_id="grok_default"):
     print("==================================================")
     print(f"🤖 GROK VIDEO AUTOMATOR - API DRIVEN")
     print(f"Project: {project_name}")
@@ -261,7 +261,7 @@ async def run_grok_bot(project_name, use_reference=True, headless_mode=True):
 
     try:
         async with async_playwright() as p:
-            await process_grok_project(project_name, project_dir, p, use_reference=use_reference, headless_mode=headless_mode)
+            await process_grok_project(project_name, project_dir, p, account_id=account_id, use_reference=use_reference, headless_mode=headless_mode)
             print("\n✅✅ PROSES SELESAI ✅✅")
     except Exception as e:
         print("\n❌ TERJADI ERROR FATAL ❌", e)
@@ -271,8 +271,9 @@ if __name__ == "__main__":
     parser.add_argument("project", type=str, help="Nama folder project")
     parser.add_argument("use_reference", type=str, nargs="?", default="true", help="Gunakan gambar referensi (true/false)")
     parser.add_argument("headless_mode", type=str, nargs="?", default="true", help="Jalankan browser headless (true/false)")
+    parser.add_argument("account_id", type=str, nargs="?", default="grok_default", help="ID akun Grok dari data/sessions")
     args = parser.parse_args()
     
     use_ref = args.use_reference.lower() == "true"
     headless_mode = args.headless_mode.lower() == "true"
-    asyncio.run(run_grok_bot(args.project, use_ref, headless_mode))
+    asyncio.run(run_grok_bot(args.project, use_ref, headless_mode, args.account_id))

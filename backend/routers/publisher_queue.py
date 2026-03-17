@@ -5,6 +5,7 @@ from typing import Dict, Any
 import os
 import json
 import shutil
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -67,12 +68,13 @@ async def get_upload_queue(db: Session = Depends(get_db)):
             for p in pr.glob("*/queue/*.mp4"):
                 project_queue_paths.append(p)
 
+        path_contexts: list[tuple[Path, str, str, str, str, str]] = []
+        grouped_filenames: dict[tuple[str, str, str], set[str]] = {}
         for p in project_queue_paths:
             fname = p.name
             parent = p.parent
             proj_dir_path = parent.parent
             proj_dir = str(proj_dir_path)
-            meta_dict = {}
             project_type = "video" if str(p).replace("\\", "/").startswith(str(VIDEO_PROJECTS_DIR).replace("\\", "/")) else "kdp"
             try:
                 if project_type == "video":
@@ -85,23 +87,38 @@ async def get_upload_queue(db: Session = Depends(get_db)):
                     parts = str(rel).replace("\\", "/").split("/")
                     project_name = parts[0] if len(parts) > 0 else ""
                     canonical_dir = ""
-                row = (
-                    db.query(AssetMetadata)
-                    .filter(
-                        AssetMetadata.project_type == project_type,
-                        AssetMetadata.project_name == project_name,
-                        AssetMetadata.canonical_dir == canonical_dir,
-                        AssetMetadata.filename == fname,
-                    ).first()
-                )
-                if row:
-                    meta_dict = {
-                        "title": row.title or "",
-                        "description": row.description or "",
-                        "tags": row.tags or "",
-                    }
             except Exception:
-                meta_dict = {}
+                project_name = ""
+                canonical_dir = ""
+            path_contexts.append((p, fname, proj_dir, project_type, project_name, canonical_dir))
+            gkey = (project_type, project_name, canonical_dir)
+            if gkey not in grouped_filenames:
+                grouped_filenames[gkey] = set()
+            grouped_filenames[gkey].add(fname)
+
+        meta_lookup: dict[tuple[str, str, str, str], dict[str, str]] = {}
+        for (project_type, project_name, canonical_dir), filenames in grouped_filenames.items():
+            if not filenames:
+                continue
+            rows = (
+                db.query(AssetMetadata)
+                .filter(
+                    AssetMetadata.project_type == project_type,
+                    AssetMetadata.project_name == project_name,
+                    AssetMetadata.canonical_dir == canonical_dir,
+                    AssetMetadata.filename.in_(list(filenames)),
+                )
+                .all()
+            )
+            for row in rows:
+                meta_lookup[(project_type, project_name, canonical_dir, row.filename)] = {
+                    "title": row.title or "",
+                    "description": row.description or "",
+                    "tags": row.tags or "",
+                }
+
+        for p, fname, proj_dir, project_type, project_name, canonical_dir in path_contexts:
+            meta_dict = meta_lookup.get((project_type, project_name, canonical_dir, fname), {})
             item = db_items.get(fname)
             if not item:
                 item = UploadQueueItem(filename=fname, status="pending")
@@ -247,6 +264,60 @@ async def get_queue_video(filename: str, db: Session = Depends(get_db)):
         return FileResponse(legacy_path)
 
     raise HTTPException(status_code=404, detail="Video file not found")
+
+
+@router.get("/queue/thumbnail/{filename}")
+async def get_queue_thumbnail(filename: str, db: Session = Depends(get_db)):
+    item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == filename).first()
+    file_path = item.file_path if item and item.file_path and os.path.exists(item.file_path) else str(UPLOAD_QUEUE_DIR / filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Queue file not found")
+
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+    if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
+        return FileResponse(str(path))
+
+    if suffix != ".mp4":
+        raise HTTPException(status_code=404, detail="Thumbnail not available")
+
+    candidates = [
+        path.parent / f"{path.stem}.webp",
+        path.parent / f"{path.stem}.jpg",
+        path.parent / f"{path.stem}.png",
+        path.parent / f"{path.stem}_ref.jpg",
+        path.parent / f"{path.stem}.__thumb.jpg",
+    ]
+    for c in candidates:
+        if c.exists():
+            return FileResponse(str(c))
+
+    thumb_path = path.parent / f"{path.stem}.__thumb.jpg"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                "00:00:01",
+                "-i",
+                str(path),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=320:-1",
+                str(thumb_path),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Thumbnail not available")
+
+    if not thumb_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not available")
+    return FileResponse(str(thumb_path))
 
 
 @router.post("/queue/archive/{filename}")
@@ -484,4 +555,3 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
             item.options = opts
     db.commit()
     return {"message": "Bulk queue config updated", "count": len(request.filenames)}
-
