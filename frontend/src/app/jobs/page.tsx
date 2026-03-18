@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 
 type RedirectSearchParams = Record<string, string | string[] | undefined>;
 
+type JobsPageProps = {
+  searchParams?: Promise<RedirectSearchParams>;
+};
+
 function buildRunsHref(searchParams: RedirectSearchParams) {
   const params = new URLSearchParams();
 
@@ -16,6 +20,7 @@ function buildRunsHref(searchParams: RedirectSearchParams) {
   return `/runs?${params.toString()}`;
 }
 
-export default function JobsPage({ searchParams = {} }: { searchParams?: RedirectSearchParams }) {
-  redirect(buildRunsHref(searchParams));
+export default async function JobsPage({ searchParams }: JobsPageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  redirect(buildRunsHref(resolvedSearchParams));
 }
