@@ -10,6 +10,7 @@ The routines are idempotent and skip tables that already contain data.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime
@@ -22,6 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ACCOUNTS_JSON = BASE_DIR / "data" / "accounts.json"
 STATUS_JSON = BASE_DIR / "upload_queue" / "status.json"
 LEGACY_SQLITE_DB = BASE_DIR / "nomad_hub.db"
+
+
+def _env_bool(name: str, default: str = "0") -> bool:
+    value = os.environ.get(name, default).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _parse_dt(value: Any) -> datetime | None:
@@ -226,6 +232,9 @@ def seed_from_legacy_sqlite(db):
 
 
 def run_migrations(db):
+    if not _env_bool("ENABLE_LEGACY_IMPORTS", "0"):
+        logger.info("[Migration] Legacy imports disabled. Set ENABLE_LEGACY_IMPORTS=1 to run bootstrap imports.")
+        return
     seed_from_legacy_sqlite(db)
     seed_accounts_from_json(db)
     seed_upload_queue_from_json(db)

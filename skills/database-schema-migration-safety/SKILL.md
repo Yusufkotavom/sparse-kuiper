@@ -16,3 +16,9 @@ description: Prosedur perubahan schema database yang aman, backward-compatible, 
 - [ ] Rollback plan tersedia.
 - [ ] Query lama tetap jalan sementara.
 - [ ] Data integrity check setelah deploy.
+
+## Checklist Supabase Realtime
+- [ ] Kolom JSON berbasis Text dimigrasikan ke JSONB.
+- [ ] Timestamp penting memakai TIMESTAMPTZ.
+- [ ] Outbox `realtime_events` terisi di transaksi yang sama dengan write utama.
+- [ ] Endpoint replay event tersedia untuk recovery client saat reconnect.

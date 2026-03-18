@@ -35,7 +35,7 @@ app.mount("/api/v1/upload_queue_static", StaticFiles(directory=str(UPLOAD_QUEUE_
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables and run data migrations on every startup."""
+    """Initialize database tables and run idempotent migration bootstrap."""
     logger.info("[Startup] Initializing database...")
     from backend.core.database import create_all_tables, SessionLocal
     from backend.core.migrations import run_migrations
@@ -44,7 +44,7 @@ async def startup_event():
     create_all_tables()
     logger.info("[Startup] Database tables ready.")
 
-    # 2. Run JSON → SQLite seed migration (only executes if tables are empty)
+    # 2. Run idempotent migration bootstrap for legacy JSON/SQLite sources
     db = SessionLocal()
     try:
         run_migrations(db)

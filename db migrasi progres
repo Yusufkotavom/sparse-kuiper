@@ -1498,3 +1498,47 @@ export function subscribeToRealtimeStream(
     },
   };
 }
+
+
+Update 2026-03-18
+
+Checkpoint implementasi saat ini
+- Backend sudah support DATABASE_URL untuk Supabase/PostgreSQL dan fallback SQLite untuk local.
+- Model utama sudah pakai tipe yang kompatibel dengan Postgres (JSONB via JSON_VALUE variant dan timezone-aware datetime).
+- Tabel outbox realtime_events sudah ada di ORM, plus helper publish_realtime_event.
+- Endpoint observability realtime sudah aktif:
+  - GET /api/v1/realtime/health
+  - GET /api/v1/realtime/events
+- Routing backend sudah include router realtime.
+- Write path realtime sudah mulai terpasang di accounts, generation, publisher queue/uploads, drive, dan worker login/generation.
+- Frontend helper subscribeToRealtimeStream di src/lib/supabase.ts sudah ada.
+
+Progress status (fase migrasi penuh ke Supabase)
+- DONE: fondasi koneksi DB + normalisasi postgres:// → postgresql://.
+- DONE: outbox event + replay API.
+- DONE: migrasi bootstrap dari legacy JSON/SQLite dibuat idempotent.
+- IN PROGRESS: cutover environment ke Supabase pooled URL sebagai default deploy.
+- IN PROGRESS: uji beban write paralel worker pada Postgres.
+- TODO: tambah migration tooling eksplisit (Alembic) untuk schema evolution production.
+- TODO: finalisasi rollout realtime di seluruh halaman yang masih polling dominan.
+
+Langkah lanjut prioritas tinggi
+1) Set env backend production:
+   - DATABASE_URL=postgresql+psycopg://...
+   - DATABASE_POOL_SIZE=10
+   - DATABASE_MAX_OVERFLOW=20
+2) Jalankan startup smoke:
+   - create_all_tables sukses
+   - run_migrations idempotent
+3) Verifikasi event stream:
+   - ubah status upload_queue / generation_tasks / accounts
+   - pastikan row realtime_events bertambah di transaksi yang sama
+4) Frontend fallback strategy:
+   - snapshot awal via API
+   - realtime incremental via subscribeToRealtimeStream
+   - fallback refetch saat reconnect gagal
+
+Catatan risiko aktif
+- Bottleneck load banyak file tetap bisa terjadi bila listing filesystem belum dipaginasi.
+- Realtime mengurangi polling, tetapi tidak otomatis memperbaiki scan folder besar.
+- Untuk stabilitas production, tetap perlu pembatasan fetch/listing dan indexing metadata.
