@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 type RedirectSearchParams = Record<string, string | string[] | undefined>;
 
-function buildRunsHref(searchParams: RedirectSearchParams) {
+function buildPublisherHref(searchParams: RedirectSearchParams) {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(searchParams)) {
@@ -10,11 +10,10 @@ function buildRunsHref(searchParams: RedirectSearchParams) {
     else if (Array.isArray(value)) value.forEach((entry) => params.append(key, entry));
   }
 
-  params.set("intent", "publisher");
-
-  return `/runs?${params.toString()}`;
+  const query = params.toString();
+  return query ? `/publisher?${query}` : "/publisher";
 }
 
 export default function QueuePage({ searchParams = {} }: { searchParams?: RedirectSearchParams }) {
-  redirect(buildRunsHref(searchParams));
+  redirect(buildPublisherHref(searchParams));
 }

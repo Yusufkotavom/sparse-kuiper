@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { ViewToggle } from "@/components/atoms/ViewToggle";
 import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
-import { FolderOpen, RefreshCw, RotateCcw } from "lucide-react";
+import { FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyProjectManagerCard, type ProjectType } from "@/components/organisms/ProjectManagerCard";
 import { supabase } from "@/lib/supabase";
@@ -28,9 +28,11 @@ export default function ProjectOverviewPage() {
   const [metaByFile, setMetaByFile] = useState<Record<string, { title: string; description: string; tags: string }>>({});
   const [filterTab, setFilterTab] = useState<"all" | "final" | "raw" | "queue" | "archive">("all");
   const [assetViewMode, setAssetViewMode] = useState<"list" | "grid">("list");
+  const [listDensity, setListDensity] = useState<"compact" | "comfortable">("comfortable");
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [recentRuns, setRecentRuns] = useState<Array<{ id: string; title: string; status: string; source: "queue" | "job"; at?: string | null }>>([]);
+  const [deletingProject, setDeletingProject] = useState(false);
 
   const allFiles = useMemo(() => [...items.final, ...items.raw, ...(items.queue || []), ...(items.archive || [])], [items]);
   const filtered = useMemo(() => {
@@ -146,6 +148,45 @@ export default function ProjectOverviewPage() {
     ensureAuthAndLoad();
   }, [router, load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(`project-page-list-density-${name}`);
+    if (saved === "compact" || saved === "comfortable") {
+      setListDensity(saved);
+    }
+  }, [name]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(`project-page-list-density-${name}`, listDensity);
+  }, [name, listDensity]);
+
+  const goToIdeation = () => {
+    router.push(projectType === "video" ? `/video/ideation?project=${encodeURIComponent(name)}` : `/kdp/ideation?project=${encodeURIComponent(name)}`);
+  };
+
+  const goToCuration = () => {
+    router.push(projectType === "video" ? `/video/curation?project=${encodeURIComponent(name)}` : `/kdp/curation?project=${encodeURIComponent(name)}`);
+  };
+
+  const handleDeleteProject = async () => {
+    const confirmed = window.confirm(`Delete project "${name}"?\n\nAll related assets for this workflow type will be removed.`);
+    if (!confirmed) return;
+
+    setDeletingProject(true);
+    try {
+      if (projectType === "video") await videoApi.deleteProject(name);
+      else await kdpApi.deleteProject(name);
+      toast.success(`Project "${name}" deleted.`);
+      router.push("/project-manager");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete project";
+      toast.error(message);
+    } finally {
+      setDeletingProject(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-4 px-1 pb-4 sm:space-y-6">
       <PageHeader
@@ -218,8 +259,23 @@ export default function ProjectOverviewPage() {
             >
               <RotateCcw className="w-4 h-4 mr-1.5" /> Looper Studio
             </Button>
+            <Button onClick={goToIdeation} size="sm" variant="outline" className="border-border hover:bg-elevated">
+              <Sparkles className="w-4 h-4 mr-1.5" /> Kembali ke Ideation
+            </Button>
+            <Button onClick={goToCuration} size="sm" variant="outline" className="border-border hover:bg-elevated">
+              Kembali ke Curation
+            </Button>
             <Button onClick={load} size="sm" variant="outline" disabled={loading} className="border-border hover:bg-elevated">
               <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </Button>
+            <Button
+              onClick={handleDeleteProject}
+              size="sm"
+              variant="outline"
+              disabled={deletingProject}
+              className="border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" /> {deletingProject ? "Deleting..." : "Delete Project"}
             </Button>
             <ViewToggle value={assetViewMode} onChange={(m) => setAssetViewMode(m)} storageKey={`project-page-assets-view-${name}`} />
           </div>
@@ -253,19 +309,30 @@ export default function ProjectOverviewPage() {
       ) : null}
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <SegmentedTabs
-          size="xs"
-          className="w-fit"
-          value={filterTab}
-          onChange={setFilterTab}
-          items={[
-            { value: "all", label: `All (${allFiles.length})` },
-            { value: "final", label: `✨ Final (${finalCount})` },
-            { value: "raw", label: `🎬 Raw (${rawCount})` },
-            { value: "queue", label: `🧺 Queue (${queueCount})` },
-            { value: "archive", label: `📦 Archive (${archiveCount})` },
-          ]}
-        />
+        <div className="w-full overflow-x-auto">
+          <div className="inline-flex min-w-max items-center gap-2 rounded-lg border border-border bg-surface/40 p-1">
+            {[
+              { value: "all" as const, label: `All (${allFiles.length})` },
+              { value: "final" as const, label: `✨ Final (${finalCount})` },
+              { value: "raw" as const, label: `🎬 Raw (${rawCount})` },
+              { value: "queue" as const, label: `🧺 Queue (${queueCount})` },
+              { value: "archive" as const, label: `📦 Archive (${archiveCount})` },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setFilterTab(tab.value)}
+                className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  filterTab === tab.value
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
         {filterTab === "raw" && rawCount > 0 && (
           <Button 
             size="xs" 
@@ -278,7 +345,7 @@ export default function ProjectOverviewPage() {
         )}
       </div>
       {selectMode && selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/40 p-3">
+        <div className="hidden md:flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface/40 p-3">
           <Label className="text-xs text-muted-foreground">Bulk Actions</Label>
           <Button
             size="sm"
@@ -405,6 +472,90 @@ export default function ProjectOverviewPage() {
           )}
         </div>
       )}
+      {selectMode && selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(var(--bottomnav-h)+0.25rem)] z-40 border-t border-border bg-background/95 p-2 backdrop-blur md:hidden">
+          <div className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto">
+            <span className="whitespace-nowrap rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+              {selected.size} selected
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 whitespace-nowrap border-border"
+              onClick={async () => {
+                const names = Array.from(selected).map(f => (f.split("/").pop() || f));
+                try {
+                  if (projectType === "video") {
+                    const res = await videoApi.bulkDeleteProjectVideos(name, names);
+                    toast.success(res.message);
+                  } else {
+                    const res = await kdpApi.bulkDeleteProjectImages(name, names);
+                    toast.success(res.message);
+                  }
+                  setSelected(new Set());
+                  await load();
+                } catch (e: unknown) {
+                  const msg = e instanceof Error ? e.message : "";
+                  toast.error(msg || "Failed to delete selected");
+                }
+              }}
+            >
+              Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 whitespace-nowrap border-border"
+              onClick={async () => {
+                const names = Array.from(selected).map(f => (f.split("/").pop() || f));
+                try {
+                  for (const fn of names) {
+                    if (projectType === "video") await videoApi.moveVideoStage(name, fn, "final");
+                    else await kdpApi.moveImageStage(name, fn, "final");
+                  }
+                  toast.success(`Moved ${names.length} to final`);
+                  setSelected(new Set());
+                  await load();
+                } catch (e: unknown) {
+                  const msg = e instanceof Error ? e.message : "";
+                  toast.error(msg || "Failed to move to final");
+                }
+              }}
+            >
+              Move Final
+            </Button>
+            {projectType === "video" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 whitespace-nowrap border-border"
+                onClick={async () => {
+                  try {
+                    const files = Array.from(selected);
+                    let added = 0;
+                    for (const rel of files) {
+                      const meta = await publisherApi.getAssetMetadata("video", rel).catch(() => ({ title: "", description: "", tags: "" }));
+                      const title = meta.title || (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
+                      const description = meta.description || `Uploaded from project ${name}`;
+                      const tags = meta.tags || "#video";
+                      await publisherApi.addToQueue({ project_type: "video", relative_path: rel, title, description, tags });
+                      added++;
+                    }
+                    toast.success(`Queued ${added} video(s)`);
+                    setSelected(new Set());
+                    await load();
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : "";
+                    toast.error(msg || "Failed to add to queue");
+                  }
+                }}
+              >
+                Add Queue
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       {loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map(i => (
@@ -464,13 +615,29 @@ export default function ProjectOverviewPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-surface/30">
-            <div className="grid grid-cols-[auto_88px_minmax(0,1.6fr)_120px_120px_minmax(260px,1fr)] gap-3 border-b border-border bg-elevated px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-              <div>{selectMode ? "Select" : "#"}</div>
-              <div>Preview</div>
-              <div>Asset</div>
-              <div>Stage</div>
-              <div>Status</div>
-              <div className="text-right">Actions</div>
+            <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">List density</p>
+              <div className="inline-flex rounded-md border border-border bg-surface/60 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setListDensity("compact")}
+                  className={`rounded px-2 py-1 text-[11px] ${listDensity === "compact" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
+                >
+                  Compact
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListDensity("comfortable")}
+                  className={`rounded px-2 py-1 text-[11px] ${listDensity === "comfortable" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
+                >
+                  Comfortable
+                </button>
+              </div>
+            </div>
+            <div className="hidden items-center gap-3 border-b border-border bg-elevated px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground lg:flex">
+              <div className="w-8">{selectMode ? "Sel" : "#"}</div>
+              <div className="w-[88px]">Preview</div>
+              <div>Detail & Actions</div>
             </div>
             {filtered.map((file, index) => {
               const checked = selected.has(file);
@@ -479,6 +646,7 @@ export default function ProjectOverviewPage() {
                 <LazyProjectManagerCard
                   key={file}
                   variant="row"
+                  density={listDensity}
                   leadingSlot={
                     selectMode ? (
                       <input

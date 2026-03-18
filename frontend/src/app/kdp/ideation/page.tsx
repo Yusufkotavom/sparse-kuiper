@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { kdpApi, settingsApi, PromptTemplate, ProjectConfig, accountsApi, Account } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,14 @@ export default function IdeationPage() {
     const [savedTemplates, setSavedTemplates] = useState<PromptTemplate[]>([]);
     const [whiskAccounts, setWhiskAccounts] = useState<Account[]>([]);
     const [whiskAccountId, setWhiskAccountId] = useState("whisk_default");
+
+    const workspaceDraft = useMemo(() => ({
+        project: selectedProject || projectName || "Belum dipilih",
+        topic,
+        character,
+        promptCount: numberN,
+    }), [selectedProject, projectName, topic, character, numberN]);
+    const curationHref = selectedProject ? `/kdp/curation?project=${encodeURIComponent(selectedProject)}` : "/kdp/curation";
 
     useEffect(() => {
         loadProjects();
@@ -217,11 +226,37 @@ export default function IdeationPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
             <div className="mb-2">
-                <h2 className="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
                     <Wand2 className="w-6 h-6 text-primary" /> Image Ideation
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">Generate AI-powered visual prompts for Image Generation (KDP/Social Media).</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                <div className="mt-3 rounded-xl border border-border bg-surface/80 p-2 sm:p-3">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {[
+                            { key: "brief", label: "1. Brief", href: "/kdp/ideation" },
+                            { key: "generate", label: "2. Generate", href: "/kdp/ideation" },
+                            { key: "review", label: "3. Review", href: curationHref },
+                            { key: "run", label: "4. Run", href: "/runs" },
+                        ].map((step) => (
+                            <Link
+                                key={step.key}
+                                href={step.href}
+                                className={`rounded-md border px-2 py-1.5 text-center text-[11px] font-semibold transition-colors ${
+                                    step.key === "generate"
+                                        ? "border-primary/40 bg-primary/10 text-primary"
+                                        : "border-border text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                {step.label}
+                            </Link>
+                        ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                        <span className="rounded-md bg-accent px-2 py-1">Project: {workspaceDraft.project}</span>
+                        <span className="rounded-md bg-accent px-2 py-1">Topic: {workspaceDraft.topic}</span>
+                        <span className="rounded-md bg-accent px-2 py-1">Prompts: {workspaceDraft.promptCount}</span>
+                    </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
                     <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-primary font-semibold">1. Ideation</span>
                     <span className="text-muted-foreground">→</span>
                     <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">2. Curation</span>
@@ -229,6 +264,7 @@ export default function IdeationPage() {
                     <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">3. Processing (Runs)</span>
                     <span className="text-muted-foreground">→</span>
                     <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">4. Publish</span>
+                </div>
                 </div>
             </div>
 
@@ -326,39 +362,59 @@ export default function IdeationPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground font-medium">System Prompt (AI Logic)</Label>
-                                <Textarea
-                                    rows={4}
-                                    value={systemPrompt}
-                                    onChange={(e) => setSystemPrompt(e.target.value)}
-                                    className="bg-background border-border text-sm leading-relaxed"
-                                    placeholder="Tell the AI how to behave..."
-                                />
+                            <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background/40 px-3 py-2">
+                                <div>
+                                    <p className="text-xs font-semibold text-foreground">Advanced Prompt Controls</p>
+                                    <p className="text-[11px] text-muted-foreground">Mode simple menyembunyikan system prompt, prefix, dan suffix.</p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() => setShowAdvanced((prev) => !prev)}
+                                >
+                                    {showAdvanced ? "Simple Mode" : "Advanced Mode"}
+                                </Button>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground font-medium">Prefix (Always Before)</Label>
-                                    <Input
-                                        value={prefix}
-                                        onChange={(e) => setPrefix(e.target.value)}
-                                        className="bg-background border-border h-9 text-xs"
-                                        placeholder="e.g. A black and white..."
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground font-medium">Suffix (Always After)</Label>
-                                    <Input
-                                        value={suffix}
-                                        onChange={(e) => setSuffix(e.target.value)}
-                                        className="bg-background border-border h-9 text-xs"
-                                        placeholder="e.g. --ar 8.5:11"
-                                    />
-                                </div>
-                            </div>
+                            {showAdvanced && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground font-medium">System Prompt (AI Logic)</Label>
+                                        <Textarea
+                                            rows={4}
+                                            value={systemPrompt}
+                                            onChange={(e) => setSystemPrompt(e.target.value)}
+                                            className="bg-background border-border text-sm leading-relaxed"
+                                            placeholder="Tell the AI how to behave..."
+                                        />
+                                    </div>
 
-                            <div className="flex gap-3 pt-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-xs text-muted-foreground font-medium">Prefix (Always Before)</Label>
+                                            <Input
+                                                value={prefix}
+                                                onChange={(e) => setPrefix(e.target.value)}
+                                                className="bg-background border-border h-9 text-xs"
+                                                placeholder="e.g. A black and white..."
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs text-muted-foreground font-medium">Suffix (Always After)</Label>
+                                            <Input
+                                                value={suffix}
+                                                onChange={(e) => setSuffix(e.target.value)}
+                                                className="bg-background border-border h-9 text-xs"
+                                                placeholder="e.g. --ar 8.5:11"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            <div className="flex flex-col sm:flex-row gap-3 pt-2">
                                 <Button
                                     onClick={handleGenerate}
                                     disabled={isLoading || !systemPrompt.trim()}
@@ -371,7 +427,7 @@ export default function IdeationPage() {
                                     onClick={handleSavePrompts}
                                     disabled={!selectedProject || prompts.length === 0}
                                     variant="outline"
-                                    className="border-primary/30 text-primary hover:bg-primary/5 h-10 font-bold px-6"
+                                    className="border-primary/30 text-primary hover:bg-primary/5 h-10 font-bold px-6 w-full sm:w-auto"
                                 >
                                     Save to Project
                                 </Button>
@@ -400,7 +456,7 @@ export default function IdeationPage() {
                         )}
                     </div>
 
-                    <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-thin">
+                    <div className="space-y-3 max-h-[70vh] sm:max-h-[75vh] overflow-y-auto pr-1 sm:pr-2 scrollbar-thin">
                         {prompts.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-[400px] border-2 border-dashed border-border rounded-3xl text-muted-foreground/40 bg-surface/30">
                                 <Wand2 className="w-12 h-12 mb-4 opacity-10" />
@@ -426,7 +482,7 @@ export default function IdeationPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 sm:opacity-0 group-hover:opacity-100 transition-all self-end sm:self-start"
+                                                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all self-end sm:self-start"
                                                 onClick={() => handleCopy(p, i)}
                                             >
                                                 {copiedIndex === i ? <CheckCheck className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}

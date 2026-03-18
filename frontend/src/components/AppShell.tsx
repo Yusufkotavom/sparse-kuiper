@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
+import { BottomTabBar } from "@/components/layout/BottomTabBar";
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -123,12 +124,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="bg-background">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-vertical:h-4 data-vertical:self-auto" />
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/95 px-3 md:px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <SidebarTrigger className="-ml-1 h-8 w-8 rounded-md border border-border/70 hover:bg-accent md:border-transparent" />
+          <Separator orientation="vertical" className="mr-1 hidden data-vertical:h-4 data-vertical:self-auto md:block" />
           
-          <div className="flex flex-1 items-center gap-4 min-w-0">
-            <nav className="hidden md:flex items-center text-xs text-muted-foreground whitespace-nowrap">
+          <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-4">
+            <nav className="hidden items-center text-xs text-muted-foreground whitespace-nowrap md:flex">
               <Link href="/" className="font-medium text-foreground hover:text-primary transition-colors">
                 Dashboard
               </Link>
@@ -142,21 +143,23 @@ export function AppShell({ children }: { children: ReactNode }) {
               ))}
             </nav>
             
-            <Separator orientation="vertical" className="hidden md:block h-4 opacity-50" />
+            <Separator orientation="vertical" className="hidden h-4 opacity-50 md:block" />
             
-            <ProjectSwitcher />
+            <div className="min-w-0 flex-1 md:flex-none">
+              <ProjectSwitcher />
+            </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5 md:gap-2">
             <Button variant="outline" size="sm" className="hidden md:inline-flex h-8 text-xs" onClick={openAndResetCommand}>
               <Command className="mr-1 h-3.5 w-3.5" /> Command
               <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">Ctrl+K</span>
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={openAndResetCommand}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md border border-border/70 md:hidden" onClick={openAndResetCommand}>
               <Command className="h-4 w-4" />
             </Button>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" />}>
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 rounded-md border border-border/70 text-muted-foreground hover:text-foreground md:border-transparent" />}>
                 <ListTree className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-surface border-border">
@@ -171,7 +174,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </DropdownMenu>
             
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" />}>
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="hidden h-8 w-8 text-muted-foreground hover:text-foreground md:inline-flex" />}>
                 <Monitor className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-surface border-border">
@@ -184,13 +187,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Separator orientation="vertical" className="mx-1 hidden h-4 md:block" />
             
             {!loading && (
               user ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger render={
-                    <Button variant="ghost" size="sm" className="h-8 gap-2 px-2 text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-md px-1.5 text-muted-foreground hover:text-foreground md:px-2">
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <User className="h-3.5 w-3.5" />
                       </div>
@@ -239,8 +242,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="flex-1 overflow-auto">
-          <div className="px-[var(--section-px)] py-[var(--section-py)]">{children}</div>
+          <div className="px-[var(--section-px)] py-[var(--section-py)] pb-[calc(var(--section-py)+var(--bottomnav-h)+env(safe-area-inset-bottom))] md:pb-[var(--section-py)]">{children}</div>
         </main>
+        <BottomTabBar />
 
         <Dialog open={commandOpen} onOpenChange={setCommandOpen}>
           <DialogContent className="sm:max-w-lg bg-surface border-border">

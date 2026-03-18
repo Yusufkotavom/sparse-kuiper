@@ -18,6 +18,7 @@ type ProjectManagerCardProps = {
   projectName: string;
   queueStatus?: QueueItem;
   variant?: "card" | "row";
+  density?: "compact" | "comfortable";
   leadingSlot?: React.ReactNode;
   onDeleted?: () => void;
   onQueued?: () => void;
@@ -35,6 +36,7 @@ export function LazyProjectManagerCard({
   projectName,
   queueStatus,
   variant = "card",
+  density = "comfortable",
   leadingSlot,
   onDeleted,
   onQueued,
@@ -185,31 +187,33 @@ export function LazyProjectManagerCard({
   return (
     <>
       {variant === "row" ? (
-        <div className="grid grid-cols-[auto_minmax(0,88px)_minmax(0,1.6fr)_120px_120px_minmax(260px,1fr)] items-center gap-3 border-b border-border/60 px-3 py-3 text-sm last:border-b-0">
-          <div className="flex items-center justify-center">{leadingSlot}</div>
-          <button type="button" onClick={() => setDrawerOpen(true)} className="overflow-hidden rounded-md border border-border bg-muted text-left">
-            <div className="aspect-video w-[88px]">
-              {thumbnailUrl ? (
-                <img src={thumbnailUrl} alt={title} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">No preview</div>
-              )}
+        <div className={`border-b border-border/60 px-3 text-sm last:border-b-0 ${density === "compact" ? "py-2" : "py-3"}`}>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex items-center justify-center pt-1">{leadingSlot}</div>
+              <button type="button" onClick={() => setDrawerOpen(true)} className="overflow-hidden rounded-md border border-border bg-muted text-left">
+                <div className="aspect-video w-[88px]">
+                  {thumbnailUrl ? (
+                    <img src={thumbnailUrl} alt={title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">No preview</div>
+                  )}
+                </div>
+              </button>
+              <div className="min-w-0 space-y-1.5">
+                <p className="truncate text-sm font-medium text-foreground">{title}</p>
+                <p className="truncate font-mono text-[11px] text-muted-foreground">{file}</p>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  <span className="rounded-md bg-muted px-2 py-0.5">{currentStage}</span>
+                  <span className="rounded-md bg-muted px-2 py-0.5">{projectType}</span>
+                  <span className="rounded-md bg-muted px-2 py-0.5">{projectName}</span>
+                  {queueStatus?.status ? <span className="rounded-md bg-primary/10 px-2 py-0.5 text-primary">{queueStatus.status}</span> : null}
+                </div>
+              </div>
             </div>
-          </button>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">{title}</p>
-            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{file}</p>
-          </div>
-          <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
-            <span className="rounded-md bg-muted px-2 py-0.5">{currentStage}</span>
-            <span className="rounded-md bg-muted px-2 py-0.5">{projectType}</span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {queueStatus?.status ? <span className="rounded-md bg-primary/10 px-2 py-0.5 text-primary">{queueStatus.status}</span> : null}
-          </div>
-          <div className="text-xs text-muted-foreground">{projectName}</div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {actions}
+            <div className="flex flex-wrap gap-2 xl:max-w-[55%] xl:justify-end">
+              {actions}
+            </div>
           </div>
         </div>
       ) : (

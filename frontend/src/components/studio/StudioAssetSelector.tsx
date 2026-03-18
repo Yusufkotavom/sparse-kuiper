@@ -35,9 +35,9 @@ export function StudioAssetSelector({
 
   return (
     <TooltipProvider delay={120}>
-    <Card className="bg-surface border-border flex flex-col max-h-[calc(100vh-200px)]">
+    <Card className="bg-surface border-border flex flex-col max-h-[calc(100vh-160px)] lg:max-h-[calc(100vh-200px)]">
       <CardHeader className="pb-3 border-b border-border/50">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
               {title}
@@ -56,17 +56,17 @@ export function StudioAssetSelector({
             </CardTitle>
             <CardDescription className="text-[11px] mt-0.5">{description}</CardDescription>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
               <Input
                 placeholder="Cari file..."
                 value={search}
                 onChange={(e) => onSearch(e.target.value)}
-                className="h-8 w-40 pl-7 text-[11px] bg-background border-border"
+                className="h-8 w-full sm:w-40 pl-7 text-[11px] bg-background border-border"
               />
             </div>
-            <div className="text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-border">
+            <div className="text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded border border-border text-center">
               {selected.length} / {filtered.length} terpilih
             </div>
           </div>
@@ -95,7 +95,7 @@ export function StudioAssetSelector({
                 <div
                   key={video}
                   onClick={() => onToggle(video)}
-                  className={`flex items-center gap-4 p-3 hover:bg-muted/30 transition-colors cursor-pointer group ${
+                  className={`grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 p-2.5 sm:p-3 hover:bg-muted/30 transition-colors cursor-pointer group ${
                     isSelected ? "bg-sky-500/5" : ""
                   }`}
                 >
@@ -116,7 +116,7 @@ export function StudioAssetSelector({
                   <Tooltip>
                     <TooltipTrigger
                       render={
-                        <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <Button variant="ghost" size="icon" className="h-7 w-7">
                             <Info className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
