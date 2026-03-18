@@ -200,3 +200,115 @@ ls -la /opt/sparse-kuiper/data/sessions/grok_default/chrome_profile | head
 ```
 
 Jika folder `chrome_profile` ada dan terisi, session sudah tersimpan.
+
+## I) Stop / Start noVNC (hemat resource)
+Kalau kamu hanya butuh login sekali, matikan noVNC setelah selesai supaya hemat RAM/CPU.
+
+### I1) Stop noVNC
+Di server:
+
+```bash
+pkill -f 'websockify.*6080' || true
+pkill -f 'x11vnc.*5901' || true
+pkill -f 'Xvfb :1' || true
+pkill -f 'startxfce4' || true
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+ss -lntp | egrep ':5901|:6080' || true
+```
+
+### I2) Start noVNC lagi
+Di server (copy-paste per baris, urutan penting):
+
+```bash
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+nohup Xvfb :1 -screen 0 1366x768x24 -ac -noreset > /tmp/xvfb.log 2>&1 &
+nohup bash -lc 'DISPLAY=:1 startxfce4' > /tmp/xfce.log 2>&1 &
+nohup x11vnc -display :1 -rfbport 5901 -localhost -forever -shared -nopw > /tmp/x11vnc.log 2>&1 &
+nohup websockify --web=/usr/share/novnc/ 127.0.0.1:6080 localhost:5901 > /tmp/novnc.log 2>&1 &
+ss -lntp | egrep ':5901|:6080' || true
+```
+
+Kalau gagal, lihat log:
+
+```bash
+tail -n 50 /tmp/xvfb.log /tmp/xfce.log /tmp/x11vnc.log /tmp/novnc.log 2>/dev/null || true
+```
+
+## J) Troubleshooting cepat (SSH/Docker/Playwright/noVNC)
+
+### J1) SSH `Connection timed out`
+Biasanya karena server sedang reboot / port 22 tidak kebuka.
+- Tunggu 1–2 menit setelah `sudo reboot`, lalu coba SSH lagi
+- Pastikan IP benar
+- Cek firewall/security group provider (port 22 open)
+
+### J2) SSH `Permission denied (publickey)`
+Biasanya karena key salah atau path key salah.
+- Pastikan command di Windows pakai path key Windows (contoh di bagian A)
+- Pastikan file key bisa dibaca Windows (bukan di dalam mesin lain)
+- Kalau kamu menjalankan `ssh ...` dari dalam server (prompt `ubuntu@...`) jangan pakai path `C:\...` karena itu path Windows, bukan path Linux
+
+### J3) noVNC kebuka tapi tidak bisa copy/paste
+Di terminal Linux, paste biasanya:
+- `Ctrl+Shift+V` atau `Shift+Insert`
+Atau pakai menu **Clipboard** di sidebar noVNC.
+
+### J4) Xvfb error: `Server is already active for display 1`
+Artinya display `:1` masih terkunci.
+
+```bash
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+pkill -f 'Xvfb :1' || true
+```
+
+Lalu start ulang (bagian I2).
+
+### J5) Docker compose command beda: `docker-compose` vs `docker compose`
+Ubuntu paket `docker-compose` lama biasanya menyediakan `docker-compose`.
+Di project ini pakai `docker compose` (lebih baru). Kalau salah satunya tidak ada:
+- coba yang satunya
+
+### J6) Cek status container & log
+Di server:
+
+```bash
+cd /opt/sparse-kuiper
+docker compose ps
+docker compose logs -n 200 --no-color backend
+docker compose logs -n 200 --no-color frontend
+```
+
+Restart:
+
+```bash
+docker compose restart backend
+docker compose restart frontend
+```
+
+Rebuild 1 service:
+
+```bash
+docker compose up -d --build backend
+```
+
+### J7) Playwright error `Chromium distribution 'chrome' is not found`
+Penyebab umum:
+- kode memaksa `channel="chrome"` tapi binary Chrome tidak tersedia di environment yang menjalankan worker (seringnya di container)
+
+Solusi di project ini:
+- gunakan fallback ke Chromium Playwright (tidak wajib Chrome system)
+- pastikan backend container bisa baca session dengan mount `./data:/app/data` (bagian C)
+
+Verifikasi session Grok dari container:
+
+```bash
+cd /opt/sparse-kuiper
+docker compose exec -T backend python - <<'PY'
+from backend.services.playwright_session_guard import check_grok_session
+print(check_grok_session("grok_default", headless=True))
+PY
+```
+
+### J8) noVNC aman (tidak kebuka publik)
+Setup ini sengaja listen di `127.0.0.1:6080` dan diakses lewat SSH tunnel.
+Kalau kamu bind ke `0.0.0.0:6080`, noVNC akan kebuka dari internet dan berbahaya.
