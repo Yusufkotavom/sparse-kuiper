@@ -17,6 +17,9 @@ Dokumentasi resmi proyek **Sparse Kuiper** (FastAPI + Next.js) untuk workflow ot
 - [ssh.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/ssh.md) — pola koneksi SSH aman
 - [shadcn_first_ui.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/shadcn_first_ui.md) — standar UI frontend
 - [documentation.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/documentation.md) — kebijakan dokumentasi
+- [agent_workflow_realtime_migration.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/agent_workflow_realtime_migration.md) — review standards, agent workflow, and real-time migration
+- [agent_skills.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/agent_skills.md) — AI agent skill pack for this project
+- [implementation_task_polling_audit.md](file:///c:/Users/admin/Desktop/New%20folder%20(4)/sparse-kuiper/docs/implementation_task_polling_audit.md) — bottleneck audit and DB-backed polling task design
 
 ## Struktur Inti Repository
 ```text
