@@ -176,7 +176,7 @@ function DownloadsContent() {
                 }
             );
             if (res.ok) {
-                alert(`✅ Successfully sent to Publisher Queue!`);
+                alert(`✅ Successfully sent to Queue Builder!`);
                 if (queueAction === "move") {
                     setFiles(files.filter(f => f.filename !== editFile.filename));
                 }
@@ -224,7 +224,7 @@ function DownloadsContent() {
                             <FolderOpen className="w-5 h-5 md:w-6 md:h-6 text-emerald-400" /> Project Downloads
                         </h2>
                         <p className="text-muted-foreground text-xs md:text-sm mt-1">
-                            Edit metadata, generate with AI, and send to Publisher Queue.
+                            Edit metadata, generate with AI, and send assets to Queue Builder.
                         </p>
                     </div>
                 </div>
@@ -391,7 +391,7 @@ function DownloadsContent() {
                         <div className="flex items-center justify-between">
                             <DialogTitle className="text-base font-semibold text-foreground flex items-center gap-2">
                                 <Send className="w-4 h-4 text-emerald-400" />
-                                Edit Metadata &amp; Send to Queue
+                                Edit Metadata &amp; Send to Queue Builder
                             </DialogTitle>
                             <Button variant="ghost" size="icon-sm" onClick={() => setEditFile(null)} className="text-muted-foreground hover:text-foreground">
                                 <X className="w-4 h-4" />
@@ -505,7 +505,7 @@ function DownloadsContent() {
                                 ) : (
                                     <CheckCircle2 className="w-4 h-4 mr-2" />
                                 )}
-                                Send to Queue
+                                Send to Queue Builder
                             </Button>
                         </div>
                     </div>

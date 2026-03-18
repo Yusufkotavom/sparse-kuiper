@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 import json
 from pathlib import Path
+from sqlalchemy.orm import Session
 from backend.core.config import settings, CONFIG_FILE
+from backend.core.database import get_db
+from backend.models.app_setting import AppSetting
 from backend.routers.settings_schemas import (
     TemplatePayload,
     TemplateUpdatePayload,
@@ -19,6 +22,8 @@ from backend.core.logger import logger
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
 VALID_CATEGORIES = ["kdp_coloring", "story", "video", "image_gen", "custom"]
+TEMPLATE_SETTING_TYPE = "prompt_template"
+LOOPER_PRESET_SETTING_TYPE = "looper_preset"
 
 
 def _read_config() -> dict:
@@ -34,149 +39,221 @@ def _write_config(data: dict):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
+def _setting_to_dict(row: AppSetting) -> dict:
+    payload = row.payload if isinstance(row.payload, dict) else {}
+    return {
+        "name": row.name,
+        **payload,
+    }
+
+
+def _seed_settings_from_config(db: Session, *, setting_type: str, config_key: str):
+    has_rows = db.query(AppSetting).filter(AppSetting.setting_type == setting_type).first()
+    if has_rows:
+        return
+
+    config = _read_config()
+    data = config.get(config_key, {})
+    if not isinstance(data, dict) or not data:
+        return
+
+    for name, payload in data.items():
+        db.add(AppSetting(
+            setting_type=setting_type,
+            name=name,
+            payload=payload if isinstance(payload, dict) else {},
+        ))
+    db.commit()
+    logger.info(f"Seeded {len(data)} {setting_type} record(s) from config.json")
+
+
 # --- Endpoints ---
 
 @router.get("/looper-presets")
-async def list_looper_presets():
+async def list_looper_presets(db: Session = Depends(get_db)):
     """Returns all video looper presets."""
-    config = _read_config()
-    presets = config.get("looper_presets", {})
-    result = []
-    for name, data in presets.items():
-        result.append({
-            "name": name,
-            **data
-        })
-    return result
+    _seed_settings_from_config(db, setting_type=LOOPER_PRESET_SETTING_TYPE, config_key="looper_presets")
+    rows = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == LOOPER_PRESET_SETTING_TYPE)
+        .order_by(AppSetting.name.asc())
+        .all()
+    )
+    return [_setting_to_dict(row) for row in rows]
 
 
 @router.post("/looper-presets")
-async def create_looper_preset(req: LooperPreset):
+async def create_looper_preset(req: LooperPreset, db: Session = Depends(get_db)):
     """Creates a new looper preset."""
-    config = _read_config()
-    presets = config.setdefault("looper_presets", {})
-
-    if req.name in presets:
+    existing = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == LOOPER_PRESET_SETTING_TYPE, AppSetting.name == req.name)
+        .first()
+    )
+    if existing:
         raise HTTPException(status_code=400, detail="Preset with this name already exists.")
 
-    presets[req.name] = req.model_dump(exclude={"name"})
-    _write_config(config)
+    db.add(AppSetting(
+        setting_type=LOOPER_PRESET_SETTING_TYPE,
+        name=req.name,
+        payload=req.model_dump(exclude={"name"}),
+    ))
+    db.commit()
     logger.info(f"Created looper preset: {req.name}")
     return {"status": "success", "message": f"Preset '{req.name}' created."}
 
 
 @router.put("/looper-presets/{name}")
-async def update_looper_preset(name: str, req: LooperPreset):
+async def update_looper_preset(name: str, req: LooperPreset, db: Session = Depends(get_db)):
     """Updates an existing looper preset."""
-    config = _read_config()
-    presets = config.get("looper_presets", {})
-
-    if name not in presets:
+    preset = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == LOOPER_PRESET_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not preset:
         raise HTTPException(status_code=404, detail="Preset not found.")
 
-    # If name is changed, we need to handle it
     if req.name != name:
-        if req.name in presets:
+        rename_conflict = (
+            db.query(AppSetting)
+            .filter(AppSetting.setting_type == LOOPER_PRESET_SETTING_TYPE, AppSetting.name == req.name)
+            .first()
+        )
+        if rename_conflict:
             raise HTTPException(status_code=400, detail="Preset with the new name already exists.")
-        del presets[name]
-    
-    presets[req.name] = req.model_dump(exclude={"name"})
-    _write_config(config)
+        preset.name = req.name
+
+    preset.payload = req.model_dump(exclude={"name"})
+    db.commit()
     logger.info(f"Updated looper preset: {req.name}")
     return {"status": "success", "message": f"Preset '{req.name}' updated."}
 
 
 @router.delete("/looper-presets/{name}")
-async def delete_looper_preset(name: str):
+async def delete_looper_preset(name: str, db: Session = Depends(get_db)):
     """Deletes a looper preset."""
-    config = _read_config()
-    presets = config.get("looper_presets", {})
-
-    if name not in presets:
+    preset = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == LOOPER_PRESET_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not preset:
         raise HTTPException(status_code=404, detail="Preset not found.")
 
-    del presets[name]
-    _write_config(config)
+    db.delete(preset)
+    db.commit()
     logger.info(f"Deleted looper preset: {name}")
     return {"status": "success", "message": f"Preset '{name}' deleted."}
 
 
 @router.get("/templates")
-async def list_templates():
+async def list_templates(db: Session = Depends(get_db)):
     """Returns all prompt templates."""
-    config = _read_config()
-    templates = config.get("templates", {})
+    _seed_settings_from_config(db, setting_type=TEMPLATE_SETTING_TYPE, config_key="templates")
+    rows = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == TEMPLATE_SETTING_TYPE)
+        .order_by(AppSetting.name.asc())
+        .all()
+    )
     result = []
-    for name, data in templates.items():
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, dict) else {}
         result.append({
-            "name": name,
-            "category": data.get("category", "custom"),
-            "system_prompt": data.get("system_prompt", ""),
-            "prefix": data.get("prefix", ""),
-            "suffix": data.get("suffix", ""),
+            "name": row.name,
+            "category": payload.get("category", "custom"),
+            "system_prompt": payload.get("system_prompt", ""),
+            "prefix": payload.get("prefix", ""),
+            "suffix": payload.get("suffix", ""),
         })
     return result
 
 
 @router.post("/templates")
-async def create_template(req: TemplatePayload):
+async def create_template(req: TemplatePayload, db: Session = Depends(get_db)):
     """Creates a new prompt template."""
     if req.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}")
 
-    config = _read_config()
-    templates = config.setdefault("templates", {})
-
-    if req.name in templates:
+    existing = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == TEMPLATE_SETTING_TYPE, AppSetting.name == req.name)
+        .first()
+    )
+    if existing:
         raise HTTPException(status_code=400, detail="Template with this name already exists.")
 
-    templates[req.name] = {
-        "category": req.category,
-        "system_prompt": req.system_prompt,
-        "prefix": req.prefix,
-        "suffix": req.suffix,
-    }
-    _write_config(config)
+    db.add(AppSetting(
+        setting_type=TEMPLATE_SETTING_TYPE,
+        name=req.name,
+        payload={
+            "category": req.category,
+            "system_prompt": req.system_prompt,
+            "prefix": req.prefix,
+            "suffix": req.suffix,
+        },
+    ))
+    db.commit()
     logger.info(f"Created template: {req.name}")
     return {"status": "success", "message": f"Template '{req.name}' created."}
 
 
 @router.put("/templates/{name}")
-async def update_template(name: str, req: TemplateUpdatePayload):
+async def update_template(name: str, req: TemplateUpdatePayload, db: Session = Depends(get_db)):
     """Updates an existing prompt template."""
-    config = _read_config()
-    templates = config.get("templates", {})
-
-    if name not in templates:
+    template = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == TEMPLATE_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not template:
         raise HTTPException(status_code=404, detail="Template not found.")
 
+    next_name = req.name.strip() if req.name is not None else name
+    if not next_name:
+        raise HTTPException(status_code=400, detail="Template name cannot be empty.")
+    if next_name != name:
+        rename_conflict = (
+            db.query(AppSetting)
+            .filter(AppSetting.setting_type == TEMPLATE_SETTING_TYPE, AppSetting.name == next_name)
+            .first()
+        )
+        if rename_conflict:
+            raise HTTPException(status_code=400, detail="Template with this name already exists.")
+        template.name = next_name
+
+    payload = template.payload if isinstance(template.payload, dict) else {}
     if req.category is not None:
         if req.category not in VALID_CATEGORIES:
             raise HTTPException(status_code=400, detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}")
-        templates[name]["category"] = req.category
+        payload["category"] = req.category
     if req.system_prompt is not None:
-        templates[name]["system_prompt"] = req.system_prompt
+        payload["system_prompt"] = req.system_prompt
     if req.prefix is not None:
-        templates[name]["prefix"] = req.prefix
+        payload["prefix"] = req.prefix
     if req.suffix is not None:
-        templates[name]["suffix"] = req.suffix
+        payload["suffix"] = req.suffix
 
-    _write_config(config)
-    logger.info(f"Updated template: {name}")
-    return {"status": "success", "message": f"Template '{name}' updated."}
+    template.payload = payload
+    db.commit()
+    logger.info(f"Updated template: {template.name}")
+    return {"status": "success", "message": f"Template '{template.name}' updated."}
 
 
 @router.delete("/templates/{name}")
-async def delete_template(name: str):
+async def delete_template(name: str, db: Session = Depends(get_db)):
     """Deletes a prompt template."""
-    config = _read_config()
-    templates = config.get("templates", {})
-
-    if name not in templates:
+    template = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == TEMPLATE_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not template:
         raise HTTPException(status_code=404, detail="Template not found.")
 
-    del templates[name]
-    _write_config(config)
+    db.delete(template)
+    db.commit()
     logger.info(f"Deleted template: {name}")
     return {"status": "success", "message": f"Template '{name}' deleted."}
 

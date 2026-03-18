@@ -49,5 +49,5 @@ def get_db():
 
 def create_all_tables():
     """Create all tables (safe to call on every startup)."""
-    from backend.models import account, upload_queue, project_config, asset_metadata, generation_task, realtime_event  # noqa: F401
+    from backend.models import account, app_setting, upload_queue, project_config, asset_metadata, generation_task, realtime_event  # noqa: F401
     Base.metadata.create_all(bind=engine)

@@ -4,15 +4,17 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { publisherApi, accountsApi, Account } from "@/lib/api";
+import { PageHeader } from "@/components/atoms/PageHeader";
+import { KpiCard } from "@/components/atoms/KpiCard";
+import { EmptyState } from "@/components/atoms/EmptyState";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, Share2, Video as VideoIcon, RefreshCw, Youtube, Instagram, Facebook, CalendarClock, Package, User } from "lucide-react";
+import { ArrowRight, CalendarClock, Facebook, Instagram, Loader2, Package, RefreshCw, Share2, User, Video as VideoIcon, Youtube } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { cn } from "@/lib/utils";
 import { getSupabaseClient, subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
 
 import { getApiBase } from "@/lib/api";
@@ -66,6 +68,13 @@ function PublisherContent() {
         [queue, selectedFiles]
     );
     const activePlatformCount = useMemo(() => Object.values(platforms).filter(Boolean).length, [platforms]);
+    const queueMetadataCount = useMemo(
+        () => selectedQueueItems.filter((item) => item.metadata?.title || item.metadata?.description || item.metadata?.tags).length,
+        [selectedQueueItems]
+    );
+    const builderModeLabel = selectedFiles.length > 1 ? "Bulk" : "Single";
+    const ctaLabel = scheduleEnabled ? "Create Scheduled Jobs" : "Create Jobs";
+    const scheduleSummary = scheduleEnabled && scheduleDate ? new Date(scheduleDate).toLocaleString() : "Post Now";
 
     useEffect(() => {
         const ensureAuthAndLoad = async () => {
@@ -221,7 +230,7 @@ function PublisherContent() {
                     open_browser: openBrowser,
                     pw_debug: pwDebug,
                 });
-                alert(`✅ Upload started for 1 video.`);
+                alert(`✅ Job created for 1 video.`);
             } else {
                 // Batch Upload
                 if (selectedPlatforms.length > 1) {
@@ -284,13 +293,13 @@ function PublisherContent() {
                     open_browser: openBrowser,
                     pw_debug: pwDebug
                 });
-                alert(`✅ Batch upload started for ${selectedFiles.length} videos!`);
+                alert(`✅ ${selectedFiles.length} jobs created successfully.`);
             }
             setSelectedFiles([]);
             loadQueue();
         } catch (e) {
             console.error("Failed to trigger upload", e);
-            alert("Failed to queue upload.");
+            alert("Failed to create jobs.");
         } finally {
             setIsUploading(false);
         }
@@ -300,18 +309,55 @@ function PublisherContent() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-5 px-4 py-4 sm:px-6 sm:py-6">
-            <div>
-                <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-white">
-                    <Share2 className="w-6 h-6 text-violet-400" />
-                    Social Media Publisher
-                </h2>
-                <p className="mt-1 text-sm text-zinc-400">Upload videos to TikTok and other platforms using your saved accounts.</p>
+            <PageHeader
+                title="Queue Builder"
+                description="Pilih asset yang sudah masuk queue, tentukan platform dan account, lalu buat job Post Now atau Schedule tanpa perlu berpindah-pindah halaman."
+                badge="Step 2 of 3"
+                actions={
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Link href="/runs?intent=publisher" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                            Open Runs
+                        </Link>
+                        <Button variant="outline" size="sm" onClick={loadQueue} disabled={isLoading}>
+                            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+                            Refresh Queue Data
+                        </Button>
+                    </div>
+                }
+            />
+
+            <div className="grid gap-3 md:grid-cols-4">
+                <KpiCard label="Queue Source" value={queue.length} size="sm" />
+                <KpiCard label="Selected Assets" value={selectedFiles.length} size="sm" />
+                <KpiCard label="Platforms" value={activePlatformCount} size="sm" />
+                <KpiCard label="Mode" value={builderModeLabel} size="sm" />
             </div>
+
+            <Card className="border-border bg-surface">
+                <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-foreground">
+                            1. Assets
+                        </span>
+                        <ArrowRight className="h-4 w-4" />
+                        <span className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-foreground">
+                            2. Queue Builder
+                        </span>
+                        <ArrowRight className="h-4 w-4" />
+                        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-foreground">
+                            3. Runs
+                        </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {scheduleEnabled ? `Mode schedule aktif untuk ${scheduleSummary}.` : "Mode Post Now aktif. Job akan langsung masuk antrean saat dibuat."}
+                    </p>
+                </CardContent>
+            </Card>
 
             <div className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-2">
                     <div className="text-xs text-zinc-400">
-                    {isLoading ? "Loading queue source..." : `Loaded ${queue.length} queue items as source data`}
+                    {isLoading ? "Loading queue source..." : `Loaded ${queue.length} queue assets ready for job creation`}
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
                         <span className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1">
@@ -321,7 +367,7 @@ function PublisherContent() {
                             Platforms: <span className="font-semibold text-zinc-100">{activePlatformCount}</span>
                         </span>
                         <span className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1">
-                            Mode: <span className="font-semibold text-zinc-100">{selectedFiles.length > 1 ? "Bulk" : "Single"}</span>
+                            Mode: <span className="font-semibold text-zinc-100">{builderModeLabel}</span>
                         </span>
                     </div>
                 </div>
@@ -337,15 +383,13 @@ function PublisherContent() {
             </div>
 
             {selectedFiles.length === 0 ? (
-                <Card className="bg-zinc-900/50 border-zinc-800/50 h-full flex items-center justify-center min-h-[300px]">
-                    <CardContent className="flex flex-col items-center justify-center text-zinc-500 space-y-4">
-                        <VideoIcon className="w-12 h-12 opacity-20" />
-                        <p className="text-sm text-center">Belum ada file dipilih untuk dipublish. Pilih dulu dari Runs untuk lanjut ke Publisher.</p>
-                        <Link href="/runs?intent=publisher" className={cn(buttonVariants({ size: "sm" }))}>
-                            Pilih dari Runs
-                        </Link>
-                    </CardContent>
-                </Card>
+                <EmptyState
+                    icon={VideoIcon}
+                    title="Belum ada asset yang dipilih"
+                    description="Mulai dari Assets atau Runs, lalu kirim asset ke Queue Builder agar user cukup memilih channel dan waktu di sini."
+                    action={{ label: "Open Runs", onClick: () => router.push("/runs?intent=publisher") }}
+                    secondaryAction={{ label: "Open Project Manager", onClick: () => router.push("/project-manager") }}
+                />
             ) : (
                 <Card className="overflow-hidden border-zinc-800 bg-zinc-900 shadow-xl">
                             {/* Preview */}
@@ -371,7 +415,7 @@ function PublisherContent() {
                                 <CardTitle className="text-base text-white font-mono break-all pb-1">
                                     {selectedFiles.length === 1 ? selectedFiles[0] : `${selectedFiles.length} Videos Selected`}
                                 </CardTitle>
-                                <CardDescription>Configure metadata, account, and publishing options.</CardDescription>
+                                <CardDescription>Lengkapi metadata, pilih channel, lalu buat job untuk dipantau di Runs.</CardDescription>
                             </CardHeader>
 
                             <CardContent className="space-y-5">
@@ -393,7 +437,7 @@ function PublisherContent() {
                                         ) : null}
                                     </div>
                                     <p className="mt-3 text-[11px] text-zinc-500">
-                                        Queue metadata detected on <span className="font-semibold text-zinc-300">{selectedQueueItems.filter((item) => item.metadata?.title || item.metadata?.description || item.metadata?.tags).length}</span> of{" "}
+                                        Queue metadata detected on <span className="font-semibold text-zinc-300">{queueMetadataCount}</span> of{" "}
                                         <span className="font-semibold text-zinc-300">{selectedFiles.length}</span> selected files.
                                     </p>
                                 </div>
@@ -446,7 +490,7 @@ function PublisherContent() {
                                             </Button>
                                         ))}
                                     </div>
-                                    <p className="text-[11px] text-zinc-500">Tip: untuk bulk upload saat ini paling aman pilih satu platform dulu agar schedule dan retry lebih konsisten.</p>
+                                    <p className="text-[11px] text-zinc-500">Tip: untuk bulk flow paling aman pilih satu platform dulu agar job, schedule, dan retry tetap konsisten.</p>
                                 </div>
 
                                 {/* TikTok Account Selector — shown when TikTok is selected */}
@@ -608,7 +652,7 @@ function PublisherContent() {
                                         className={`justify-start text-xs ${scheduleEnabled ? 'bg-amber-900/20 border-amber-600 text-amber-300 hover:bg-amber-900/30' : 'text-muted-foreground hover:bg-surface'}`}
                                     >
                                         <CalendarClock className="w-4 h-4" />
-                                        {scheduleEnabled ? '⏰ Scheduled Post' : 'Schedule for Later (Optional)'}
+                                        {scheduleEnabled ? 'Scheduled Job Active' : 'Schedule for Later (Optional)'}
                                     </Button>
 
                                     {scheduleEnabled && (
@@ -721,7 +765,7 @@ function PublisherContent() {
                                             Platforms: <span className="font-semibold text-zinc-100">{activePlatformCount}</span>
                                         </div>
                                         <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-                                            Schedule: <span className="font-semibold text-zinc-100">{scheduleEnabled && scheduleDate ? new Date(scheduleDate).toLocaleString() : "None"}</span>
+                                            Schedule: <span className="font-semibold text-zinc-100">{scheduleSummary}</span>
                                         </div>
                                     </div>
                                     <Button
@@ -730,15 +774,15 @@ function PublisherContent() {
                                         className="h-12 w-full bg-violet-600 font-bold text-white shadow-lg shadow-violet-900/20 hover:bg-violet-700"
                                     >
                                         {isUploading ? (
-                                            <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Uploading...</>
+                                            <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Creating jobs...</>
                                         ) : (
-                                            <><Share2 className="w-5 h-5 mr-2" /> {scheduleEnabled ? 'Schedule Upload' : 'Publish Now'}</>
+                                            <><Share2 className="w-5 h-5 mr-2" /> {ctaLabel}</>
                                         )}
                                     </Button>
 
                                     {scheduleEnabled && scheduleDate && (
                                         <p className="mt-2 text-center text-xs text-amber-400/70">
-                                            Will post at {new Date(scheduleDate).toLocaleString()} (your local time)
+                                            Job akan masuk ke schedule untuk {new Date(scheduleDate).toLocaleString()} (local time)
                                         </p>
                                     )}
                                 </div>

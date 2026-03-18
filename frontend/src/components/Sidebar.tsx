@@ -85,7 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
                 href: "/runs",
             },
             {
-                label: "Publisher",
+                label: "Queue Builder",
                 icon: Share2,
                 href: "/publisher",
             },

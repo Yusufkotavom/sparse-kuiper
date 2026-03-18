@@ -38,7 +38,12 @@ class BatchUploadRequest(BaseModel):
 
 
 class MetadataRequest(BaseModel):
-    prompt: str
+    prompt: str = ""
+    project_type: str | None = None
+    file: str | None = None
+    title: str | None = None
+    description: str | None = None
+    tags: str | None = None
     provider: str | None = None
     model: str | None = None
 

@@ -96,7 +96,7 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-sm font-semibold text-foreground">Belum ada project di workspace ini</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Ikuti alur singkat di bawah untuk membuat project pertama dan meneruskannya ke Publisher.
+                Ikuti alur singkat di bawah untuk membuat project pertama dan meneruskannya ke Queue Builder.
               </p>
             </div>
           </div>
@@ -136,22 +136,22 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="rounded-lg border border-border bg-background/80 p-3">
-              <p className="font-semibold text-foreground">3. Atur Runs</p>
+              <p className="font-semibold text-foreground">3. Queue Builder & Runs</p>
               <p className="mt-1 text-muted-foreground">
-                Dari Runs, atur status proses dan lanjutkan ke Publisher untuk jadwal/upload.
+                Buka Queue Builder untuk pilih channel dan jadwal, lalu pantau semua job dari Runs.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
+                <Link
+                  href="/publisher"
+                  className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+                >
+                  Buka Queue Builder
+                </Link>
                 <Link
                   href="/runs"
                   className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
                 >
                   Buka Runs
-                </Link>
-                <Link
-                  href="/publisher"
-                  className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  Buka Publisher
                 </Link>
               </div>
             </div>

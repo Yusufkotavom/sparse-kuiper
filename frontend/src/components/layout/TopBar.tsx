@@ -24,7 +24,7 @@ const PAGE_LABELS: Record<string, string> = {
     "queue-manager": "Runs",
     jobs: "Runs",
     runs: "Runs",
-    publisher: "Publisher",
+    publisher: "Queue Builder",
     logs: "Logs",
     published: "Published",
 };

@@ -1,0 +1,15 @@
+backend/
+chrome_profile/
+global_profiles/
+projects/
+video_projects/
+upload_queue/
+data/
+config/
+internal_tools/
+.cloudflared/
+frontend/.next/
+frontend/node_modules/
+backend/venv/
+*.db
+*.log

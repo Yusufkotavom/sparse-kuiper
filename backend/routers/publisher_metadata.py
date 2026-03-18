@@ -1,25 +1,123 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import json
 from pathlib import Path
 
 from backend.core.config import VIDEO_PROJECTS_DIR, PROJECTS_DIR
+from backend.core.database import get_db
 from backend.core.logger import logger
+from backend.models.asset_metadata import AssetMetadata
 from backend.routers.publisher_schemas import MetadataRequest
 from backend.services.prompt_engine import _chat_completion_text, _resolve_provider_and_model
+from sqlalchemy.orm import Session
+import re
 
 
 router = APIRouter()
 
 
 @router.post("/generate-metadata")
-async def generate_metadata(request: MetadataRequest):
+async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_db)):
     from backend.routers.settings import _read_config, DEFAULT_SYSTEM_PROMPTS
     _cfg = _read_config()
     system_prompt = (
         _cfg.get("system_prompts", {}).get("metadata_generate")
         or DEFAULT_SYSTEM_PROMPTS["metadata_generate"]
     )
+
+    def _parse_asset_path(project_type: str, file: str):
+        parts = file.replace("\\", "/").split("/")
+        if len(parts) == 0:
+            raise HTTPException(status_code=400, detail="Invalid file path")
+        project_name = parts[0]
+        filename = parts[-1]
+        canonical_dir = ""
+        if "queue" in parts:
+            idx = parts.index("queue")
+            if idx > 0:
+                canonical_dir = parts[idx - 1]
+        else:
+            if len(parts) > 1:
+                canonical_dir = parts[1]
+        return project_name, canonical_dir, filename
+
+    def _resolve_prompt_from_asset(project_type: str, file: str) -> str:
+        normalized = file.replace("\\", "/")
+        parts = normalized.split("/")
+        if not parts:
+            return ""
+        project_name = parts[0]
+        filename = parts[-1]
+
+        match = re.search(r"prompt_(\d+)", filename)
+        if not match:
+            return ""
+        try:
+            idx = int(match.group(1)) - 1
+        except Exception:
+            return ""
+        if idx < 0:
+            return ""
+
+        if project_type == "video":
+            prompts_file = VIDEO_PROJECTS_DIR / project_name / "prompts.json"
+        elif project_type == "kdp":
+            prompts_file = PROJECTS_DIR / project_name / "prompts.json"
+        else:
+            return ""
+
+        if not prompts_file.exists():
+            return ""
+        try:
+            with open(prompts_file, "r", encoding="utf-8") as f:
+                prompts = json.load(f)
+            if isinstance(prompts, list) and idx < len(prompts) and isinstance(prompts[idx], str):
+                return prompts[idx].strip()
+        except Exception:
+            return ""
+        return ""
+
+    def _read_sidecar_metadata(project_type: str, file: str) -> dict:
+        if project_type == "video":
+            base = VIDEO_PROJECTS_DIR
+        elif project_type == "kdp":
+            base = PROJECTS_DIR
+        else:
+            return {}
+
+        full_path = base / file
+        parent = full_path.parent
+        sidecar_path = parent / f"{full_path.stem}.meta.json"
+        if sidecar_path.exists():
+            try:
+                with open(sidecar_path, "r", encoding="utf-8") as sf:
+                    data = json.load(sf)
+                return {
+                    "title": data.get("title", "") or "",
+                    "description": data.get("description", "") or "",
+                    "tags": data.get("tags", "") or "",
+                }
+            except Exception:
+                return {}
+
+        info_path = parent / f"{full_path.stem}.info.json"
+        if info_path.exists():
+            try:
+                with open(info_path, "r", encoding="utf-8") as jf:
+                    data = json.load(jf)
+                raw_tags = data.get("tags", []) or []
+                raw_cats = data.get("categories", []) or []
+                combined = list(dict.fromkeys(raw_tags + raw_cats))
+                tags_str = " ".join(f"#{str(t).replace(' ', '')}" for t in combined[:10])
+                return {
+                    "title": data.get("title", "") or "",
+                    "description": (data.get("description") or "").strip()[:500],
+                    "tags": tags_str,
+                }
+            except Exception:
+                return {}
+
+        return {}
 
     def _parse_json_loose(text: str) -> dict:
         s = text.strip()
@@ -47,6 +145,68 @@ async def generate_metadata(request: MetadataRequest):
         if not model_name and provider_name == "gemini":
             model_name = "gemini-1.5-flash"
 
+        user_parts: list[str] = []
+        prompt_text = (request.prompt or "").strip()
+
+        if request.project_type and request.file:
+            project_type = request.project_type
+            file = request.file
+            user_parts.append(f"Asset file: {file}")
+
+            gen_prompt = _resolve_prompt_from_asset(project_type, file)
+            if gen_prompt:
+                user_parts.append(f"Generation prompt:\n{gen_prompt}")
+
+            seed_title = (request.title or "").strip()
+            seed_description = (request.description or "").strip()
+            seed_tags = (request.tags or "").strip()
+
+            project_name, canonical_dir, filename = _parse_asset_path(project_type, file)
+            row = None
+            try:
+                row = (
+                    db.query(AssetMetadata)
+                    .filter(
+                        AssetMetadata.project_type == project_type,
+                        AssetMetadata.project_name == project_name,
+                        AssetMetadata.filename == filename,
+                    )
+                    .first()
+                )
+            except Exception:
+                row = None
+            if row:
+                if not seed_title:
+                    seed_title = (row.title or "").strip()
+                if not seed_description:
+                    seed_description = (row.description or "").strip()
+                if not seed_tags:
+                    seed_tags = (row.tags or "").strip()
+
+            sidecar = _read_sidecar_metadata(project_type, file)
+            if sidecar:
+                if not seed_title:
+                    seed_title = (sidecar.get("title") or "").strip()
+                if not seed_description:
+                    seed_description = (sidecar.get("description") or "").strip()
+                if not seed_tags:
+                    seed_tags = (sidecar.get("tags") or "").strip()
+
+            if seed_title or seed_description or seed_tags:
+                user_parts.append("Existing metadata (may be incomplete, improve if needed):")
+                if seed_title:
+                    user_parts.append(f"- title: {seed_title}")
+                if seed_description:
+                    user_parts.append(f"- description: {seed_description}")
+                if seed_tags:
+                    user_parts.append(f"- tags: {seed_tags}")
+
+        if prompt_text:
+            user_parts.append(f"Additional context:\n{prompt_text}")
+
+        if not user_parts:
+            user_parts.append('Additional context: ""')
+
         content = _chat_completion_text(
             provider=provider_name,
             model=model_name,
@@ -58,7 +218,8 @@ async def generate_metadata(request: MetadataRequest):
                         "You are to produce ONLY a compact JSON object with keys: "
                         'title (string), description (string), tags (array of strings). '
                         "Do not include code fences, markdown, or explanations.\n\n"
-                        f'Generate metadata for: \"{request.prompt}\"'
+                        "If existing metadata is provided, keep the intent but you may improve clarity and virality.\n\n"
+                        + "\n\n".join(user_parts)
                     ),
                 },
             ],
@@ -123,4 +284,3 @@ async def get_sidecar_metadata(project_type: str, file: str):
     except Exception as e:
         logger.error(f"[Sidecar] Failed reading sidecar metadata: {e}")
         raise HTTPException(status_code=500, detail="Failed to read sidecar metadata")
-

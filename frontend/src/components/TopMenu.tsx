@@ -12,7 +12,7 @@ const pageTitles: Record<string, string> = {
   "/video/muxing": "Video Muxing",
   "/scraper": "Web Scraper",
   "/runs": "Runs",
-  "/publisher": "Publisher",
+  "/publisher": "Queue Builder",
   "/accounts": "Accounts",
   "/drive": "Drive Explorer",
   "/settings": "Settings",

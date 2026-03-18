@@ -290,7 +290,7 @@ function RunsContent() {
   };
 
   const subtitleBits = [
-    intent === "publisher" ? "Menampilkan queue-ready assets untuk lanjut ke Publisher." : null,
+    intent === "publisher" ? "Menampilkan queue-ready assets untuk lanjut ke Queue Builder." : null,
     intent === "jobs" ? "Fokus pada job scheduler dan kontrol eksekusi." : null,
     queryProject ? `Filter project: ${queryProject}` : null,
     queryFile ? `Filter file: ${queryFile}` : null,
@@ -316,6 +316,32 @@ function RunsContent() {
           </div>
         }
       />
+
+      <div className="rounded-xl border border-border bg-surface/40 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-foreground">Langkah 3: Monitor hasil job</p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border bg-background px-3 py-1 text-foreground">1. Assets</span>
+              <span>→</span>
+              <span className="rounded-full border border-border bg-background px-3 py-1 text-foreground">2. Queue Builder</span>
+              <span>→</span>
+              <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-foreground">3. Runs</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Semua job yang sudah dibuat akan tampil di sini untuk dipantau, dijalankan ulang, pause, resume, atau cancel.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/project-manager" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Open Assets
+            </Link>
+            <Link href="/publisher" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Open Queue Builder
+            </Link>
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-4">
         <KpiCard label="Active" value={activeRuns.length} size="sm" />
@@ -350,7 +376,7 @@ function RunsContent() {
           icon={CalendarClock}
           title="Belum ada data pada tab ini"
           description="Coba tab lain, ubah filter, atau refresh data dari backend."
-          action={intent === "publisher" ? { label: "Open Publisher", onClick: () => router.push("/publisher") } : undefined}
+          action={intent === "publisher" ? { label: "Open Queue Builder", onClick: () => router.push("/publisher") } : undefined}
         />
       ) : null}
 
@@ -389,7 +415,7 @@ function RunsContent() {
                   {run.canOpenPublisher ? (
                     <Link href={publisherHref} className={buttonVariants({ size: "sm" })}>
                       <ExternalLink className="mr-1 h-4 w-4" />
-                      Open in Publisher
+                      Open Queue Builder
                     </Link>
                   ) : null}
 

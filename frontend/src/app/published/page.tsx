@@ -206,7 +206,7 @@ function PublishedContent() {
                             </div>
                             <div className="col-span-2 flex justify-end gap-2">
                                 <Link href="/publisher" className={buttonVariants({ variant: "outline", size: "sm", className: "w-full md:w-auto" })}>
-                                    Retry
+                                    Open Queue Builder
                                 </Link>
                             </div>
                             {item.last_error ? (

@@ -571,6 +571,31 @@ export const publisherApi = {
         });
     },
 
+    generateAssetMetadata: async (payload: {
+        project_type: string;
+        file: string;
+        title?: string;
+        description?: string;
+        tags?: string;
+        provider?: string;
+        model?: string;
+        prompt?: string;
+    }) => {
+        return fetchApi<{ title: string, description: string, tags: string }>("/publisher/generate-metadata", {
+            method: "POST",
+            body: JSON.stringify({
+                prompt: payload.prompt || "",
+                project_type: payload.project_type,
+                file: payload.file,
+                title: payload.title || "",
+                description: payload.description || "",
+                tags: payload.tags || "",
+                provider: payload.provider,
+                model: payload.model,
+            }),
+        });
+    },
+
     addToQueue: async (payload: { project_type: string, relative_path: string, title: string, description: string, tags: string }) => {
         return fetchApi<{ message: string, filename: string }>("/publisher/queue/add", {
             method: "POST",

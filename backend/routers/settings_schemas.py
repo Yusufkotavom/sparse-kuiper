@@ -11,6 +11,7 @@ class TemplatePayload(BaseModel):
 
 
 class TemplateUpdatePayload(BaseModel):
+    name: Optional[str] = None
     category: Optional[str] = None
     system_prompt: Optional[str] = None
     prefix: Optional[str] = None

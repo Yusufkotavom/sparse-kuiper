@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const quickActions = useMemo(() => [
     { label: "Buka Runs", href: "/runs", keywords: ["runs", "queue", "jobs", "monitor"] },
-    { label: "Buka Publisher", href: "/publisher", keywords: ["publish", "upload"] },
+    { label: "Buka Queue Builder", href: "/publisher", keywords: ["publish", "upload", "queue builder"] },
     { label: "Buka Pipeline Templates", href: "/pipeline-templates", keywords: ["pipeline", "template", "video", "kdp"] },
     { label: "Buka Project Manager", href: "/project-manager", keywords: ["project", "manager"] },
     { label: "Buka Drive Explorer", href: "/drive", keywords: ["drive", "assets"] },
@@ -176,7 +176,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-surface border-border">
                 <DropdownMenuItem onClick={() => router.push("/")} className="cursor-pointer text-xs">Dashboard</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/publisher")} className="cursor-pointer text-xs">Publisher</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/publisher")} className="cursor-pointer text-xs">Queue Builder</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/accounts")} className="cursor-pointer text-xs">Accounts</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/drive")} className="cursor-pointer text-xs">Drive Explorer</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/runs")} className="cursor-pointer text-xs">Runs</DropdownMenuItem>
@@ -273,7 +273,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 event.preventDefault();
                 navigateFromCommand(first.href);
               }}
-              placeholder="Cari aksi... (contoh: runs, publisher, logs)"
+              placeholder="Cari aksi... (contoh: runs, queue builder, logs)"
               className="mt-1"
               autoFocus
             />

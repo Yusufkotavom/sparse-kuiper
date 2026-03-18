@@ -197,7 +197,7 @@ export default function LandingPage() {
                 <CardContent className="space-y-3 text-sm">
                   <Bullet>Manajemen project & asset</Bullet>
                   <Bullet>Auto metadata (judul, deskripsi, hashtag)</Bullet>
-                  <Bullet>Queue publisher + scheduler</Bullet>
+                  <Bullet>Queue builder + scheduler</Bullet>
                   <Bullet>Integrasi scraper & drive</Bullet>
                   <Bullet>Monitoring job + log</Bullet>
                 </CardContent>
@@ -235,8 +235,8 @@ export default function LandingPage() {
                 bullets={["Queue lintas project", "Sidecar metadata", "Bulk actions & tags"]}
               />
               <InfoCard
-                title="Publisher Ops"
-                desc="Kontrol akun, campaign, dan hasil publish per platform. Monitoring status yang bisa diaudit."
+                title="Queue Builder Ops"
+                desc="Atur account, jadwal, dan job publish per platform dengan monitoring status yang mudah diaudit."
                 bullets={["Account mapping", "Schedule per platform", "Job status & logs"]}
               />
             </div>
@@ -388,7 +388,7 @@ export default function LandingPage() {
               />
               <FaqItem
                 q="Apakah bisa pakai file dari Drive dan hasil scrape sekaligus?"
-                a="Bisa. Asset bisa datang dari beberapa sumber, lalu tetap dikelola dalam project yang sama dan bisa masuk ke queue publisher."
+                a="Bisa. Asset bisa datang dari beberapa sumber, lalu tetap dikelola dalam project yang sama dan bisa masuk ke queue builder."
               />
               <FaqItem
                 q="Apakah ada scheduling publish?"

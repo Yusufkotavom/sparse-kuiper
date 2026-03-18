@@ -101,12 +101,16 @@ export function LazyProjectManagerCard({
   };
 
   const generateSingleMetadata = async () => {
-    const base = fileName.replace(/\.[^\.]+$/, "");
-    const prompt = `Project: ${projectName}\nFilename: ${base}\nTask: Generate a compelling, viral, clickbait, title add 2 tags in title, SEO description (1-2 paragraphs), and 5-10 hashtags.\nStyle: viral,shortform video, friendly tone, english`;
     await runAction(
       "generate",
       async () => {
-        const gen = await publisherApi.generateMetadata(prompt).catch(() => ({ title: base, description: `Asset from project ${projectName}`, tags: "#content" }));
+        const gen = await publisherApi.generateAssetMetadata({
+          project_type: projectType,
+          file,
+          title: prefetchedMeta?.title || queueStatus?.metadata?.title || "",
+          description: prefetchedMeta?.description || queueStatus?.metadata?.description || "",
+          tags: prefetchedMeta?.tags || queueStatus?.metadata?.tags || "",
+        }).catch(() => ({ title: fileName.replace(/\.[^\.]+$/, ""), description: `Asset from project ${projectName}`, tags: "#content" }));
         await publisherApi.setAssetMetadata(projectType, file, { title: gen.title, description: gen.description, tags: gen.tags });
       },
       "Metadata generated"
@@ -175,7 +179,7 @@ export function LazyProjectManagerCard({
       </DropdownMenu>
       {projectType === "video" && queueStatus?.status ? (
         <Link href={`/publisher?file=${encodeURIComponent(fileName)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Open in Publisher
+          Open Queue Builder
         </Link>
       ) : null}
       <Button size="sm" variant="outline" className="text-rose-300 hover:text-rose-200" onClick={() => void deleteAsset()} disabled={busyKey === "delete"}>

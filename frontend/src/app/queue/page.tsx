@@ -4,6 +4,7 @@ type RedirectSearchParams = Record<string, string | string[] | undefined>;
 
 function buildPublisherHref(searchParams: RedirectSearchParams) {
   const params = new URLSearchParams();
+  params.set("intent", "builder");
 
   for (const [key, value] of Object.entries(searchParams)) {
     if (typeof value === "string") params.set(key, value);

@@ -431,6 +431,7 @@ export default function SettingsPage() {
             if (editingOriginalName) {
                 // Update existing
                 await settingsApi.updateTemplate(editingOriginalName, {
+                    name: form.name,
                     category: form.category,
                     system_prompt: form.system_prompt,
                     prefix: form.prefix,

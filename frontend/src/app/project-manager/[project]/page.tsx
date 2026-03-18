@@ -295,6 +295,41 @@ export default function ProjectOverviewPage() {
           { value: "kdp", label: "Image Creation" },
         ]}
       />
+      {projectType === "video" ? (
+        <div className="rounded-xl border border-border bg-surface/40 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">Alur utama project ini</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-foreground">1. Assets</span>
+                <span>→</span>
+                <span className="rounded-full border border-border bg-background px-3 py-1 text-foreground">2. Queue Builder</span>
+                <span>→</span>
+                <span className="rounded-full border border-border bg-background px-3 py-1 text-foreground">3. Runs</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pilih asset final, kirim ke queue, lalu lanjut atur platform dan jadwal di Queue Builder.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => router.push("/project-manager")} className="border-border hover:bg-elevated">
+                Open Assets
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => router.push("/publisher")}
+                disabled={queueCount === 0}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Open Queue Builder
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => router.push(`/runs?project=${encodeURIComponent(name)}`)} className="border-border hover:bg-elevated">
+                Open Runs
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {recentRuns.length > 0 ? (
         <div className="rounded-xl border border-border bg-surface/40 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -449,7 +484,16 @@ export default function ProjectOverviewPage() {
               Add to Queue
             </Button>
           )}
-          {projectType === "video" && (
+          {projectType === "video" && queueCount > 0 && (
+            <Button
+              size="sm"
+              onClick={() => router.push("/publisher")}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Open Queue Builder
+            </Button>
+          )}
+          {(projectType === "video" || projectType === "kdp") && (
             <Button
               size="sm"
               variant="outline"
@@ -460,12 +504,18 @@ export default function ProjectOverviewPage() {
                   let updated = 0;
                   for (const rel of files) {
                     const base = (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
-                    const prompt = `Project: ${name}\nFilename: ${base}\nTask: Generate a compelling, viral, clickbait, title add 2 tags in title, SEO description (1-2 paragraphs), and 5-10 hashtags.\nStyle: viral,shortform video, friendly tone, english`;
-                    const gen = await publisherApi.generateMetadata(prompt).catch(() => ({ title: base, description: `Video from project ${name}`, tags: "#video" }));
-                    await publisherApi.setAssetMetadata("video", rel, { title: gen.title, description: gen.description, tags: gen.tags });
+                    const seed = metaByFile[rel];
+                    const gen = await publisherApi.generateAssetMetadata({
+                      project_type: projectType,
+                      file: rel,
+                      title: seed?.title || "",
+                      description: seed?.description || "",
+                      tags: seed?.tags || "",
+                    }).catch(() => ({ title: base, description: `Asset from project ${name}`, tags: projectType === "video" ? "#video" : "#image" }));
+                    await publisherApi.setAssetMetadata(projectType, rel, { title: gen.title, description: gen.description, tags: gen.tags });
                     updated++;
                   }
-                  toast.success(`Generated metadata for ${updated} video(s)`);
+                  toast.success(`Generated metadata for ${updated} asset(s)`);
                 } catch (e: unknown) {
                   const msg = e instanceof Error ? e.message : "";
                   toast.error(msg || "Failed to generate metadata");
@@ -556,6 +606,15 @@ export default function ProjectOverviewPage() {
                 }}
               >
                 Add Queue
+              </Button>
+            )}
+            {projectType === "video" && queueCount > 0 && (
+              <Button
+                size="sm"
+                className="h-8 whitespace-nowrap bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => router.push("/publisher")}
+              >
+                Queue Builder
               </Button>
             )}
           </div>
