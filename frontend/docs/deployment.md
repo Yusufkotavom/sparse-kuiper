@@ -51,5 +51,9 @@ sudo cloudflared service install
 sudo systemctl enable --now cloudflared
 ```
 8) Frontend (Vercel):
+- Set Root Directory = `frontend`
+- Install Command = `npm install`
+- Build Command = `npm run build`
 - NEXT_PUBLIC_API_URL=https://api.<domain>/api/v1
+- Copy env template: `cp frontend/.env.example frontend/.env.local` (lokal), lalu mapping env yang sama di Vercel
 - Redeploy
