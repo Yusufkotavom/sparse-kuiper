@@ -6,51 +6,14 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 const realtimeSchema = process.env.NEXT_PUBLIC_SUPABASE_REALTIME_SCHEMA || "public";
 
-function createOptionalSupabaseClient(): SupabaseClient {
-  if (isSupabaseConfigured && supabaseUrl && supabaseAnonKey) {
-    return createClient(supabaseUrl, supabaseAnonKey);
+function createRequiredSupabaseClient(): SupabaseClient {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY wajib diisi.");
   }
-
-  console.warn(
-    "[supabase] NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY belum diisi. Auth Supabase dinonaktifkan (optional mode)."
-  );
-
-  const noSession = { data: { session: null }, error: null };
-  const noUser = { data: { user: null }, error: null };
-
-  return {
-    auth: {
-      getSession: async () => noSession,
-      getUser: async () => noUser,
-      onAuthStateChange: () => ({
-        data: {
-          subscription: {
-            unsubscribe: () => undefined,
-          },
-        },
-      }),
-      signOut: async () => ({ error: null }),
-      signInWithPassword: async () => ({
-        data: { session: null, user: null },
-        error: { message: "Supabase belum dikonfigurasi." },
-      }),
-      signInWithOAuth: async () => ({
-        data: { provider: null, url: null },
-        error: { message: "Supabase belum dikonfigurasi." },
-      }),
-      signUp: async () => ({
-        data: { session: null, user: null },
-        error: { message: "Supabase belum dikonfigurasi." },
-      }),
-      updateUser: async () => ({
-        data: { user: null },
-        error: { message: "Supabase belum dikonfigurasi." },
-      }),
-    },
-  } as unknown as SupabaseClient;
+  return createClient(supabaseUrl, supabaseAnonKey);
 }
 
-export const supabase = createOptionalSupabaseClient();
+export const supabase = createRequiredSupabaseClient();
 
 export type RealtimeEventRecord = {
   id: number;
@@ -66,10 +29,6 @@ export function subscribeToRealtimeStream(
   stream: string,
   onEvent: (event: RealtimeEventRecord) => void
 ) {
-  if (!isSupabaseConfigured) {
-    return { unsubscribe: () => undefined };
-  }
-
   const channel = supabase
     .channel(`realtime-events:${stream}`)
     .on(

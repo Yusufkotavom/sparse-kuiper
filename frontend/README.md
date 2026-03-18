@@ -7,10 +7,13 @@ Frontend dashboard untuk Nomad Hub (KDP Studio, Video Gen, Scraper, Queue, Publi
 - Backend FastAPI berjalan di port `8000`
 
 ## Konfigurasi
-Pastikan file `.env.local` berisi API base URL backend FastAPI:
+Pastikan file `.env.local` berisi:
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_REALTIME_SCHEMA=public
 ```
 
 ## Menjalankan Lokal
