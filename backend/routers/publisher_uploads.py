@@ -10,12 +10,25 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import UPLOAD_QUEUE_DIR, BASE_DIR, SESSIONS_DIR
 from backend.core.database import get_db
+from backend.core.json_utils import ensure_json_dict
 from backend.core.logger import logger
+from backend.core.realtime import publish_realtime_event
 from backend.models.upload_queue import UploadQueueItem
 from backend.routers.publisher_schemas import UploadRequest, BatchUploadRequest
 
 
 router = APIRouter()
+
+
+def _publish_queue_event(db: Session, item: UploadQueueItem, event_type: str = "updated"):
+    publish_realtime_event(
+        db,
+        stream="upload_queue",
+        event_type=event_type,
+        entity_table="upload_queue",
+        entity_id=item.filename,
+        payload=item.to_dict(),
+    )
 
 
 def _get_or_create_item(db: Session, filename: str) -> UploadQueueItem:
@@ -104,6 +117,7 @@ def process_upload_task(filename: str, request: UploadRequest):
             item.status = "completed_with_errors"
             item.worker_state = "failed"
             item.last_error = f"File not found: {file_path}"
+            _publish_queue_event(db, item)
             db.commit()
             return
 
@@ -112,6 +126,7 @@ def process_upload_task(filename: str, request: UploadRequest):
         item.title = request.title
         item.description = request.description
         item.tags = request.tags
+        _publish_queue_event(db, item)
         db.commit()
 
         platforms_status = item.platforms.copy()
@@ -218,7 +233,7 @@ def process_upload_task(filename: str, request: UploadRequest):
                             result = {"success": False, "message": "YouTube account not connected."}
                         else:
                             from backend.services.uploaders.youtube_uploader import upload_video
-                            token_dict = json.loads(account.oauth_token_json)
+                            token_dict = ensure_json_dict(account.oauth_token_json)
                             yt_res = upload_video(
                                 token_dict=token_dict,
                                 video_path=file_path,
@@ -230,7 +245,7 @@ def process_upload_task(filename: str, request: UploadRequest):
                                 schedule=request.schedule,
                             )
                             if yt_res.get("refreshed_token"):
-                                account.oauth_token_json = json.dumps(yt_res["refreshed_token"])
+                                account.oauth_token_json = yt_res["refreshed_token"]
                                 db.commit()
 
                             result = {"success": True, "message": f"Uploaded: {yt_res.get('url')}"}
@@ -244,7 +259,7 @@ def process_upload_task(filename: str, request: UploadRequest):
                             result = {"success": False, "message": "Facebook account not connected."}
                         else:
                             from backend.services.uploaders.facebook_uploader import upload_video_to_facebook
-                            token_dict = json.loads(account.oauth_token_json)
+                            token_dict = ensure_json_dict(account.oauth_token_json)
                             try:
                                 fb_res = upload_video_to_facebook(
                                     token_dict=token_dict,
@@ -291,6 +306,7 @@ def process_upload_task(filename: str, request: UploadRequest):
             )[:1000]
             if all_success:
                 item.uploaded_at = datetime.now()
+            _publish_queue_event(db, item)
             db.commit()
 
         logger.info(f"Finished upload task for {filename}")
@@ -332,6 +348,7 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
         item.title = vid.title
         item.description = vid.description
         item.tags = vid.tags
+        _publish_queue_event(db, item)
 
     if not videos_data:
         raise HTTPException(status_code=400, detail="No valid videos found for batch upload.")
@@ -368,6 +385,7 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                             item.status = "completed" if result.get("success") else "completed_with_errors"
                             if result.get("success"):
                                 item.uploaded_at = datetime.now()
+                            _publish_queue_event(db2, item)
                 elif platform == "youtube":
                     if account.auth_method == "playwright":
                         for vid in videos:
@@ -407,7 +425,7 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                         if not account.oauth_token_json:
                             logger.error("[Batch Upload] YouTube account not connected.")
                             continue
-                        token_dict = json.loads(account.oauth_token_json)
+                        token_dict = ensure_json_dict(account.oauth_token_json)
 
                         for vid in videos:
                             fname = os.path.basename(vid["video_path"])
@@ -424,7 +442,7 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                                 )
                                 if yt_res.get("refreshed_token"):
                                     token_dict = yt_res["refreshed_token"]
-                                    account.oauth_token_json = json.dumps(token_dict)
+                                    account.oauth_token_json = token_dict
                                     db2.commit()
 
                                 status, msg = "success", f"Uploaded: {yt_res.get('url')}"
@@ -443,12 +461,13 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                                 item.status = "completed" if status == "success" else "completed_with_errors"
                                 if status == "success":
                                     item.uploaded_at = datetime.now()
+                                _publish_queue_event(db2, item)
                 elif platform == "facebook":
                     from backend.services.uploaders.facebook_uploader import upload_video_to_facebook
                     if not account.oauth_token_json:
                         logger.error("[Batch Upload] Facebook account not connected.")
                         continue
-                    token_dict = json.loads(account.oauth_token_json)
+                    token_dict = ensure_json_dict(account.oauth_token_json)
 
                     for vid in videos:
                         fname = os.path.basename(vid["video_path"])

@@ -1,7 +1,8 @@
 """Account ORM Model — replaces data/accounts.json."""
-from sqlalchemy import Column, String, DateTime, Text, Boolean
+from sqlalchemy import Column, String, Text, Boolean
 from sqlalchemy.sql import func
 from backend.core.database import Base
+from backend.core.sqltypes import JSON_VALUE, UTC_DATETIME
 
 
 class Account(Base):
@@ -14,10 +15,10 @@ class Account(Base):
     status = Column(String, default="needs_login")   # active, disconnected, needs_login
     api_key = Column(String, nullable=True)
     api_secret = Column(String, nullable=True)       # Stored as-is; mask on response
-    oauth_token_json = Column(Text, nullable=True)   # YouTube OAuth token (JSON string)
+    oauth_token_json = Column(JSON_VALUE, nullable=True)   # OAuth/refresh tokens
     channel_title = Column(String, nullable=True)    # YouTube channel name after connect
-    last_login = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
+    last_login = Column(UTC_DATETIME, nullable=True)
+    created_at = Column(UTC_DATETIME, server_default=func.now())
     tags = Column(String, nullable=True)             # Comma-separated or JSON string for tags
     notes = Column(Text, nullable=True)              # Notes for this account
     browser_type = Column(String, default="chromium")# chromium, firefox

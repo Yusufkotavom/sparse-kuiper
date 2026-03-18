@@ -13,12 +13,24 @@ from pathlib import Path
 from backend.core.config import UPLOAD_QUEUE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR, BASE_DIR
 from backend.core.database import get_db
 from backend.core.logger import logger
+from backend.core.realtime import publish_realtime_event
 from backend.models.upload_queue import UploadQueueItem
 from backend.models.asset_metadata import AssetMetadata
 from backend.routers.publisher_schemas import QueueAddRequest, QueueUpdateRequest, QueueConfigRequest, BulkQueueConfigRequest
 
 
 router = APIRouter()
+
+
+def _publish_queue_event(db: Session, item: UploadQueueItem, event_type: str):
+    publish_realtime_event(
+        db,
+        stream="upload_queue",
+        event_type=event_type,
+        entity_table="upload_queue",
+        entity_id=item.filename,
+        payload=item.to_dict(),
+    )
 
 
 @router.get("/queue", response_model=Dict[str, Any])
@@ -211,6 +223,7 @@ async def delete_from_queue(filename: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
 
     if item:
+        _publish_queue_event(db, item, "deleted")
         db.delete(item)
         db.commit()
 
@@ -284,6 +297,7 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
     item.platforms = {}
     item.file_path = str(dest_path)
     item.project_dir = str(origin_dir)
+    _publish_queue_event(db, item, "upserted")
     db.commit()
 
     try:
@@ -441,6 +455,7 @@ async def archive_queue_item(filename: str, db: Session = Depends(get_db)):
 
     item.file_path = str(dest_path)
     item.status = "archived"
+    _publish_queue_event(db, item, "updated")
     db.commit()
 
     try:
@@ -511,6 +526,7 @@ async def return_queue_item_to_project(filename: str, db: Session = Depends(get_
         logger.error(f"Failed to return {filename} to project dir: {e}")
         raise HTTPException(status_code=500, detail="Failed to return file to project")
 
+    _publish_queue_event(db, item, "deleted")
     db.delete(item)
     db.commit()
 
@@ -578,6 +594,7 @@ async def update_queue_metadata(request: QueueUpdateRequest, db: Session = Depen
     item.title = request.title
     item.description = request.description
     item.tags = request.tags
+    _publish_queue_event(db, item, "updated")
     db.commit()
     try:
         if item.project_dir and os.path.exists(item.project_dir):
@@ -614,6 +631,7 @@ async def update_queue_config(request: QueueConfigRequest, db: Session = Depends
         item.scheduled_at = datetime.fromisoformat(request.schedule) if request.schedule else None
     except Exception:
         item.scheduled_at = None
+    _publish_queue_event(db, item, "updated")
     db.commit()
     return {"message": "Queue config updated"}
 
@@ -666,5 +684,6 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
             opts = item.options or {}
             opts["platform_publish_schedule"] = publish_scheduled.isoformat()
             item.options = opts
+        _publish_queue_event(db, item, "updated")
     db.commit()
     return {"message": "Bulk queue config updated", "count": len(request.filenames)}

@@ -1,7 +1,6 @@
 """Polling-friendly generation APIs for image/video tasks (Replicate provider)."""
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -9,6 +8,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
+from backend.core.json_utils import ensure_json_value
+from backend.core.realtime import publish_realtime_event
 from backend.models.generation_task import GenerationTask
 from backend.services.generation_service import create_generation_task, run_generation_task
 
@@ -69,11 +70,11 @@ def _task_to_response(task: GenerationTask, include_payload: bool = False):
     inp = {}
     res = None
     try:
-        inp = json.loads(task.input_json or "{}")
+        inp = ensure_json_value(task.input_json) or {}
     except Exception:
         inp = {}
     try:
-        res = json.loads(task.result_json) if task.result_json else None
+        res = ensure_json_value(task.result_json) if task.result_json else None
     except Exception:
         res = None
 
@@ -149,6 +150,14 @@ def cancel_generation_task(task_id: str, db: Session = Depends(get_db)):
     if task.status in {"succeeded", "failed", "canceled"}:
         return _task_to_response(task, include_payload=False)
     task.status = "canceled"
+    publish_realtime_event(
+        db,
+        stream="generation_tasks",
+        event_type="updated",
+        entity_table="generation_tasks",
+        entity_id=task.id,
+        payload={"id": task.id, "status": task.status},
+    )
     db.commit()
     db.refresh(task)
     return _task_to_response(task, include_payload=False)

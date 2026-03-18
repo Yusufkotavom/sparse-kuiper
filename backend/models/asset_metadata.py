@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.sql import func
 from backend.core.database import Base
+from backend.core.sqltypes import UTC_DATETIME
 
 
 class AssetMetadata(Base):
@@ -14,4 +15,4 @@ class AssetMetadata(Base):
     title = Column(String, default="")
     description = Column(Text, default="")
     tags = Column(String, default="")
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(UTC_DATETIME, server_default=func.now(), onupdate=func.now(), index=True)

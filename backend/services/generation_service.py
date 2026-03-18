@@ -11,7 +11,9 @@ from typing import Any, Dict, Optional
 import requests
 
 from backend.core.database import SessionLocal
+from backend.core.json_utils import ensure_json_value
 from backend.core.logger import logger
+from backend.core.realtime import publish_realtime_event
 from backend.models.generation_task import GenerationTask
 
 
@@ -39,9 +41,17 @@ def create_generation_task(db, task_type: str, provider: str, prompt: str, input
         provider=provider,
         status="queued",
         prompt=prompt,
-        input_json=json.dumps(input_payload or {}),
+        input_json=input_payload or {},
     )
     db.add(task)
+    publish_realtime_event(
+        db,
+        stream="generation_tasks",
+        event_type="created",
+        entity_table="generation_tasks",
+        entity_id=task.id,
+        payload={"id": task.id, "task_type": task.task_type, "status": task.status, "provider": task.provider},
+    )
     db.commit()
     db.refresh(task)
     return task
@@ -94,9 +104,17 @@ def run_generation_task(task_id: str):
 
         task.status = "running"
         task.started_at = _now()
+        publish_realtime_event(
+            db,
+            stream="generation_tasks",
+            event_type="updated",
+            entity_table="generation_tasks",
+            entity_id=task.id,
+            payload={"id": task.id, "status": task.status, "started_at": task.started_at},
+        )
         db.commit()
 
-        input_payload = json.loads(task.input_json or "{}")
+        input_payload = ensure_json_value(task.input_json) or {}
         if task.provider != "replicate":
             raise RuntimeError(f"Unsupported provider: {task.provider}")
 
@@ -123,13 +141,21 @@ def run_generation_task(task_id: str):
         prediction = result["prediction"]
         task.provider_task_id = prediction.get("id")
         task.poll_count = int(result.get("poll_count") or 0)
-        task.result_json = json.dumps(prediction)
+        task.result_json = prediction
         task.result_url = _extract_result_url(prediction.get("output"))
         task.status = prediction.get("status") or "succeeded"
         if task.status != "succeeded":
             task.error = prediction.get("error") or "Generation failed"
 
         task.finished_at = _now()
+        publish_realtime_event(
+            db,
+            stream="generation_tasks",
+            event_type="updated",
+            entity_table="generation_tasks",
+            entity_id=task.id,
+            payload={"id": task.id, "status": task.status, "result_url": task.result_url, "error": task.error},
+        )
         db.commit()
 
     except Exception as exc:
@@ -139,6 +165,14 @@ def run_generation_task(task_id: str):
             task.status = "failed"
             task.error = str(exc)
             task.finished_at = _now()
+            publish_realtime_event(
+                db,
+                stream="generation_tasks",
+                event_type="updated",
+                entity_table="generation_tasks",
+                entity_id=task.id,
+                payload={"id": task.id, "status": task.status, "error": task.error},
+            )
             db.commit()
     finally:
         db.close()

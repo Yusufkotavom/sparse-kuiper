@@ -231,6 +231,7 @@ def run_login(account_id: str, platform: str, sessions_dir: str, manual_mode: bo
                     sys.path.append(project_root)
                     
                 from backend.core.database import SessionLocal
+                from backend.core.realtime import publish_realtime_event
                 from backend.models.account import Account
                 
                 db = SessionLocal()
@@ -239,6 +240,14 @@ def run_login(account_id: str, platform: str, sessions_dir: str, manual_mode: bo
                     if db_acc:
                         db_acc.status = "active"
                         db_acc.last_login = datetime.now()
+                        publish_realtime_event(
+                            db,
+                            stream="accounts",
+                            event_type="status_changed",
+                            entity_table="accounts",
+                            entity_id=db_acc.id,
+                            payload=db_acc.to_dict(mask_secret=True),
+                        )
                         db.commit()
                         log("✅ Account status → active in database")
                     else:
@@ -246,7 +255,7 @@ def run_login(account_id: str, platform: str, sessions_dir: str, manual_mode: bo
                 finally:
                     db.close()
             except Exception as e:
-                log(f"⚠️  Could not update SQLite database: {e}")
+                log(f"⚠️  Could not update database account status: {e}")
         else:
             log("⏰ TIMEOUT: No login detected within 5 minutes. No cookies saved.")
             log("   Tip: After logging in, wait a moment for the page to redirect.")

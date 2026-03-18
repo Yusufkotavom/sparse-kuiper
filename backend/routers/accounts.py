@@ -1,6 +1,5 @@
 """
-Accounts router — now backed by SQLite via SQLAlchemy.
-All JSON flat-file I/O has been replaced with proper ORM CRUD.
+Accounts router — DB-backed CRUD with realtime event publishing.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
@@ -13,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from backend.core.logger import logger
 from backend.core.database import get_db
+from backend.core.json_utils import ensure_json_dict
+from backend.core.realtime import publish_realtime_event
 from backend.models.account import Account
 from backend.core.config import settings, BASE_DIR, SESSIONS_DIR
 from backend.routers.accounts_schemas import (
@@ -31,6 +32,21 @@ router = APIRouter()
 # Session directories (Playwright auth)
 os.makedirs(str(SESSIONS_DIR), exist_ok=True)
 LOGIN_SCRIPT = str(BASE_DIR / "backend" / "services" / "playwright_login.py")
+
+
+def _account_payload(account: Account) -> dict:
+    return account.to_dict(mask_secret=True)
+
+
+def _publish_account_event(db: Session, event_type: str, account: Account):
+    publish_realtime_event(
+        db,
+        stream="accounts",
+        event_type=event_type,
+        entity_table="accounts",
+        entity_id=account.id,
+        payload=_account_payload(account),
+    )
 
 
 @router.get("/")
@@ -68,6 +84,8 @@ async def get_accounts(db: Session = Depends(get_db)):
         created = True
 
     if created:
+        for acc in (grok_acc, whisk_acc):
+            _publish_account_event(db, "upserted", acc)
         db.commit()
         accounts = db.query(Account).all()
 
@@ -100,6 +118,7 @@ async def add_account(account: AccountModel, db: Session = Depends(get_db)):
         last_login=datetime.fromisoformat(account.last_login) if account.last_login else None,
     )
     db.add(db_account)
+    _publish_account_event(db, "created", db_account)
     db.commit()
     db.refresh(db_account)
     return {"message": "Account added successfully", "account": db_account.to_dict(mask_secret=True)}
@@ -130,6 +149,7 @@ async def update_account(account_id: str, account: AccountModel, db: Session = D
     if account.lightweight_mode is not None:
         db_account.lightweight_mode = account.lightweight_mode
 
+    _publish_account_event(db, "updated", db_account)
     db.commit()
     db.refresh(db_account)
     return {"message": "Account updated successfully", "account": db_account.to_dict(mask_secret=True)}
@@ -141,6 +161,7 @@ async def delete_account(account_id: str, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    _publish_account_event(db, "deleted", account)
     db.delete(account)
     db.commit()
 
@@ -210,6 +231,7 @@ async def refresh_account_status(account_id: str, db: Session = Depends(get_db))
     if os.path.exists(cookies_path):
         account.status = "active"
         account.last_login = datetime.now()
+        _publish_account_event(db, "status_changed", account)
         db.commit()
         logger.info(f"[Accounts] {account_id} manually refreshed → active (cookies found)")
         return {"status": "active", "message": "Cookies found — account marked as active."}
@@ -264,8 +286,6 @@ async def connect_youtube(account_id: str, req: YoutubeConnectRequest, db: Sessi
 
     try:
         from backend.services.uploaders.youtube_uploader import exchange_code_for_token, get_channel_info
-        import json
-
         # Exchange code for tokens using the stored secret path
         secret_path = account.api_key or None
         token_dict = exchange_code_for_token(req.code.strip(), client_secrets_path=secret_path, code_verifier=account.api_secret or None)
@@ -274,11 +294,12 @@ async def connect_youtube(account_id: str, req: YoutubeConnectRequest, db: Sessi
         channel_info = get_channel_info(token_dict)
 
         # Save to DB
-        account.oauth_token_json = json.dumps(token_dict)
+        account.oauth_token_json = token_dict
         account.channel_title = channel_info.get("channel_title", "")
         account.status = "active"
         account.last_login = datetime.now()
         account.api_secret = None
+        _publish_account_event(db, "connected", account)
         db.commit()
 
         logger.info(f"[YouTube OAuth] Account {account_id} connected: {account.channel_title}")
@@ -303,6 +324,7 @@ async def disconnect_youtube(account_id: str, db: Session = Depends(get_db)):
     account.oauth_token_json = None
     account.channel_title = None
     account.status = "needs_login"
+    _publish_account_event(db, "disconnected", account)
     db.commit()
     logger.info(f"[YouTube OAuth] Account {account_id} disconnected.")
     return {"status": "disconnected", "message": "YouTube disconnected."}
@@ -346,13 +368,13 @@ async def connect_drive(account_id: str, req: DriveConnectRequest, db: Session =
         raise HTTPException(status_code=400, detail="Account is not a Google Drive account")
     try:
         from backend.services.google_drive_service import exchange_code_for_token
-        import json
         secret_path = account.api_key or None
         token_dict = exchange_code_for_token(req.code.strip(), client_secrets_path=secret_path)
-        account.oauth_token_json = json.dumps(token_dict)
+        account.oauth_token_json = token_dict
         account.channel_title = "Google Drive"
         account.status = "active"
         account.last_login = datetime.now()
+        _publish_account_event(db, "connected", account)
         db.commit()
         logger.info(f"[Drive OAuth] Account {account_id} connected.")
         return {"status": "active", "message": "Google Drive connected."}
@@ -401,6 +423,8 @@ async def import_credentials(payload: ImportAccountsPayload, db: Session = Depen
         row.browser_type = item.get("browser_type") or row.browser_type
         row.proxy = item.get("proxy") or row.proxy
         row.user_agent = item.get("user_agent") or row.user_agent
+        row.oauth_token_json = ensure_json_dict(item.get("oauth_token_json")) or row.oauth_token_json
+        _publish_account_event(db, "upserted", row)
         updated += 1
     db.commit()
     return {"message": "Import completed", "imported": imported, "updated": updated}
@@ -441,13 +465,13 @@ async def connect_facebook(account_id: str, req: FacebookConnectRequest, db: Ses
         raise HTTPException(status_code=404, detail="Account not found")
     
     try:
-        import json
         from backend.services.uploaders.facebook_uploader import exchange_code_for_token
         token_dict = exchange_code_for_token(req.code.strip(), account.api_key, account.api_secret)
         pages = token_dict.get("pages", [])
         
-        account.oauth_token_json = json.dumps(token_dict)
+        account.oauth_token_json = token_dict
         account.status = "needs_page"
+        _publish_account_event(db, "updated", account)
         db.commit()
 
         logger.info(f"[Facebook OAuth] Account {account_id} fetched {len(pages)} pages")
@@ -466,11 +490,10 @@ async def select_facebook_page(account_id: str, req: FacebookSelectPageRequest, 
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    import json
     if not account.oauth_token_json:
          raise HTTPException(status_code=400, detail="Not authorized yet")
 
-    token_dict = json.loads(account.oauth_token_json)
+    token_dict = ensure_json_dict(account.oauth_token_json)
     pages = token_dict.get("pages", [])
     
     selected_page = next((p for p in pages if p.get("id") == req.page_id), None)
@@ -478,10 +501,11 @@ async def select_facebook_page(account_id: str, req: FacebookSelectPageRequest, 
         raise HTTPException(status_code=400, detail="Invalid page selected")
         
     token_dict["selected_page_id"] = req.page_id
-    account.oauth_token_json = json.dumps(token_dict)
+    account.oauth_token_json = token_dict
     account.channel_title = selected_page.get("name")
     account.status = "active"
     account.last_login = datetime.now()
+    _publish_account_event(db, "connected", account)
     db.commit()
 
     logger.info(f"[Facebook OAuth] Account {account_id} connected to page: {account.channel_title}")
@@ -500,6 +524,7 @@ async def disconnect_facebook(account_id: str, db: Session = Depends(get_db)):
     account.oauth_token_json = None
     account.channel_title = None
     account.status = "needs_login"
+    _publish_account_event(db, "disconnected", account)
     db.commit()
     logger.info(f"[Facebook OAuth] Account {account_id} disconnected.")
     return {"status": "disconnected", "message": "Facebook disconnected."}

@@ -1,30 +1,44 @@
 """
-Auto-migration seeder: Imports existing JSON flat-files into SQLite on first startup.
-Run automatically by main.py on application start.
+Postgres/Supabase-friendly migration bootstrap.
+
+This module performs two lightweight startup tasks:
+- one-time imports from legacy JSON flat files
+- one-time imports from a legacy SQLite file when present
+
+The routines are idempotent and skip tables that already contain data.
 """
-import os
+from __future__ import annotations
+
 import json
+import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
-from sqlalchemy import inspect, text
+from typing import Any
 
 from backend.core.logger import logger
-from backend.core.database import engine
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ACCOUNTS_JSON = BASE_DIR / "data" / "accounts.json"
 STATUS_JSON = BASE_DIR / "upload_queue" / "status.json"
-IS_SQLITE = engine.dialect.name == "sqlite"
+LEGACY_SQLITE_DB = BASE_DIR / "nomad_hub.db"
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def seed_accounts_from_json(db):
-    """Import data/accounts.json into the accounts table if the table is empty."""
     from backend.models.account import Account
-    if db.query(Account).count() > 0:
-        return  # Already seeded
 
-    if not ACCOUNTS_JSON.exists():
+    if db.query(Account).count() > 0 or not ACCOUNTS_JSON.exists():
         return
 
     try:
@@ -32,7 +46,7 @@ def seed_accounts_from_json(db):
             accounts = json.load(f)
 
         for acc in accounts:
-            account = Account(
+            db.add(Account(
                 id=acc.get("id") or f"{acc.get('platform', 'unknown')}_{uuid.uuid4().hex[:8]}",
                 name=acc.get("name", "Unnamed"),
                 platform=acc.get("platform", ""),
@@ -40,25 +54,28 @@ def seed_accounts_from_json(db):
                 status=acc.get("status", "needs_login"),
                 api_key=acc.get("api_key"),
                 api_secret=acc.get("api_secret"),
-                last_login=datetime.fromisoformat(acc["last_login"]) if acc.get("last_login") else None,
-            )
-            db.add(account)
+                oauth_token_json=acc.get("oauth_token_json"),
+                channel_title=acc.get("channel_title"),
+                tags=acc.get("tags"),
+                notes=acc.get("notes"),
+                browser_type=acc.get("browser_type") or "chromium",
+                proxy=acc.get("proxy"),
+                user_agent=acc.get("user_agent"),
+                lightweight_mode=bool(acc.get("lightweight_mode", False)),
+                last_login=_parse_dt(acc.get("last_login")),
+            ))
 
         db.commit()
-        count = len(accounts)
-        logger.info(f"[Migration] Seeded {count} account(s) from accounts.json → SQLite")
+        logger.info(f"[Migration] Seeded {len(accounts)} account(s) from accounts.json")
     except Exception as e:
-        logger.error(f"[Migration] Failed to seed accounts: {e}")
+        logger.error(f"[Migration] Failed to seed accounts from JSON: {e}")
         db.rollback()
 
 
 def seed_upload_queue_from_json(db):
-    """Import upload_queue/status.json into the upload_queue table if it is empty."""
     from backend.models.upload_queue import UploadQueueItem
-    if db.query(UploadQueueItem).count() > 0:
-        return  # Already seeded
 
-    if not STATUS_JSON.exists():
+    if db.query(UploadQueueItem).count() > 0 or not STATUS_JSON.exists():
         return
 
     try:
@@ -73,235 +90,143 @@ def seed_upload_queue_from_json(db):
                 title=meta.get("title"),
                 description=meta.get("description"),
                 tags=meta.get("tags"),
+                uploaded_at=_parse_dt(data.get("uploaded_at")),
+                scheduled_at=_parse_dt(data.get("scheduled_at")),
             )
             item.platforms = data.get("platforms", {})
             db.add(item)
 
         db.commit()
-        count = len(status_data)
-        logger.info(f"[Migration] Seeded {count} queue item(s) from status.json → SQLite")
+        logger.info(f"[Migration] Seeded {len(status_data)} queue item(s) from status.json")
     except Exception as e:
-        logger.error(f"[Migration] Failed to seed upload queue: {e}")
+        logger.error(f"[Migration] Failed to seed upload queue from JSON: {e}")
         db.rollback()
 
 
-def alter_accounts_add_youtube_cols():
-    """Add oauth_token_json / channel_title to accounts if not present.
-    Uses the raw SQLite engine directly — safe to call before any ORM query.
-    """
-    if not IS_SQLITE:
+def seed_from_legacy_sqlite(db):
+    if not LEGACY_SQLITE_DB.exists():
         return
+
     try:
-        with engine.connect() as conn:
-            raw = conn.connection  # raw sqlite3 Connection
-            cursor = raw.cursor()
-            existing = {row[1] for row in cursor.execute("PRAGMA table_info(accounts)")}
-            added = []
-            if "oauth_token_json" not in existing:
-                cursor.execute("ALTER TABLE accounts ADD COLUMN oauth_token_json TEXT")
-                added.append("oauth_token_json")
-            if "channel_title" not in existing:
-                cursor.execute("ALTER TABLE accounts ADD COLUMN channel_title VARCHAR")
-                added.append("channel_title")
-            if added:
-                raw.commit()
-                logger.info(f"[Migration] Added accounts columns: {added}")
+        from backend.models.account import Account
+        from backend.models.asset_metadata import AssetMetadata
+        from backend.models.generation_task import GenerationTask
+        from backend.models.project_config import ProjectConfig
+        from backend.models.upload_queue import UploadQueueItem
+
+        conn = sqlite3.connect(str(LEGACY_SQLITE_DB))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        table_specs = [
+            ("accounts", Account, lambda row: Account(
+                id=row["id"],
+                name=row["name"],
+                platform=row["platform"],
+                auth_method=row["auth_method"],
+                status=row["status"],
+                api_key=row["api_key"],
+                api_secret=row["api_secret"],
+                oauth_token_json=json.loads(row["oauth_token_json"]) if row["oauth_token_json"] else None,
+                channel_title=row["channel_title"],
+                last_login=_parse_dt(row["last_login"]),
+                tags=row["tags"],
+                notes=row["notes"],
+                browser_type=row["browser_type"] or "chromium",
+                proxy=row["proxy"],
+                user_agent=row["user_agent"],
+                lightweight_mode=bool(row["lightweight_mode"]) if row["lightweight_mode"] is not None else False,
+            )),
+            ("generation_tasks", GenerationTask, lambda row: GenerationTask(
+                id=row["id"],
+                task_type=row["task_type"],
+                provider=row["provider"],
+                status=row["status"],
+                prompt=row["prompt"],
+                input_json=json.loads(row["input_json"] or "{}"),
+                provider_task_id=row["provider_task_id"],
+                result_url=row["result_url"],
+                result_json=json.loads(row["result_json"]) if row["result_json"] else None,
+                error=row["error"],
+                poll_count=row["poll_count"] or 0,
+                created_at=_parse_dt(row["created_at"]),
+                started_at=_parse_dt(row["started_at"]),
+                finished_at=_parse_dt(row["finished_at"]),
+                updated_at=_parse_dt(row["updated_at"]),
+            )),
+            ("upload_queue", UploadQueueItem, lambda row: UploadQueueItem(
+                filename=row["filename"],
+                status=row["status"],
+                title=row["title"],
+                description=row["description"],
+                tags=row["tags"],
+                scheduled_at=_parse_dt(row["scheduled_at"]),
+                uploaded_at=_parse_dt(row["uploaded_at"]),
+                created_at=_parse_dt(row["created_at"]),
+                worker_state=row["worker_state"],
+                attempt_count=row["attempt_count"] or 0,
+                last_error=row["last_error"],
+                last_run_at=_parse_dt(row["last_run_at"]),
+                file_path=row["file_path"],
+                project_dir=row["project_dir"],
+            )),
+            ("project_configs", ProjectConfig, lambda row: ProjectConfig(
+                id=row["id"],
+                name=row["name"],
+                project_type=row["project_type"],
+                topic=row["topic"] or "",
+                character=row["character"] or "",
+                number_n=row["number_n"] or 10,
+                system_prompt=row["system_prompt"] or "",
+                prefix=row["prefix"] or "",
+                suffix=row["suffix"] or "",
+                grok_account_id=row["grok_account_id"] or "",
+                whisk_account_id=row["whisk_account_id"] or "",
+                created_at=_parse_dt(row["created_at"]),
+                updated_at=_parse_dt(row["updated_at"]),
+                _prompts_json=json.loads(row["prompts_json"] or "[]"),
+            )),
+            ("asset_metadata", AssetMetadata, lambda row: AssetMetadata(
+                id=row["id"],
+                project_type=row["project_type"],
+                project_name=row["project_name"],
+                canonical_dir=row["canonical_dir"],
+                filename=row["filename"],
+                title=row["title"] or "",
+                description=row["description"] or "",
+                tags=row["tags"] or "",
+                updated_at=_parse_dt(row["updated_at"]),
+            )),
+        ]
+
+        for table_name, model, row_factory in table_specs:
+            if db.query(model).count() > 0:
+                continue
+            try:
+                rows = cur.execute(f"SELECT * FROM {table_name}").fetchall()
+            except sqlite3.Error:
+                continue
+            if not rows:
+                continue
+            for row in rows:
+                obj = row_factory(row)
+                if isinstance(obj, UploadQueueItem):
+                    obj.platforms = json.loads(row["platform_statuses"] or "{}")
+                    obj.target_platforms = json.loads(row["target_platforms"] or "[]")
+                    obj.account_map = json.loads(row["account_map"] or "{}")
+                    obj.options = json.loads(row["options"] or "{}")
+                    obj.job_tags = json.loads(row["job_tags"] or "[]")
+                db.add(obj)
+            db.commit()
+            logger.info(f"[Migration] Imported {len(rows)} row(s) from legacy SQLite table {table_name}")
+        conn.close()
     except Exception as e:
-        logger.warning(f"[Migration] Could not add YouTube columns: {e}")
+        logger.warning(f"[Migration] Legacy SQLite import skipped: {e}")
+        db.rollback()
 
-def remove_accounts_donut_cols():
-    if not IS_SQLITE:
-        return
-    try:
-        with engine.connect() as conn:
-            raw = conn.connection
-            cursor = raw.cursor()
-            existing = {row[1] for row in cursor.execute("PRAGMA table_info(accounts)")}
-            if "donut_profile_id" not in existing and "donut_api_token" not in existing:
-                return
-
-            cursor.execute("""
-                CREATE TABLE accounts_new (
-                    id VARCHAR PRIMARY KEY,
-                    name VARCHAR NOT NULL,
-                    platform VARCHAR NOT NULL,
-                    auth_method VARCHAR NOT NULL,
-                    status VARCHAR,
-                    api_key VARCHAR,
-                    api_secret VARCHAR,
-                    oauth_token_json TEXT,
-                    channel_title VARCHAR,
-                    last_login DATETIME,
-                    created_at DATETIME,
-                    tags VARCHAR,
-                    notes TEXT,
-                    browser_type VARCHAR,
-                    proxy VARCHAR,
-                    user_agent VARCHAR,
-                    lightweight_mode BOOLEAN
-                )
-            """)
-
-            cursor.execute("""
-                INSERT INTO accounts_new (
-                    id,
-                    name,
-                    platform,
-                    auth_method,
-                    status,
-                    api_key,
-                    api_secret,
-                    oauth_token_json,
-                    channel_title,
-                    last_login,
-                    created_at,
-                    tags,
-                    notes,
-                    browser_type,
-                    proxy,
-                    user_agent,
-                    lightweight_mode
-                )
-                SELECT
-                    id,
-                    name,
-                    platform,
-                    auth_method,
-                    status,
-                    api_key,
-                    api_secret,
-                    oauth_token_json,
-                    channel_title,
-                    last_login,
-                    created_at,
-                    tags,
-                    notes,
-                    browser_type,
-                    proxy,
-                    user_agent,
-                    lightweight_mode
-                FROM accounts
-            """)
-
-            cursor.execute("DROP TABLE accounts")
-            cursor.execute("ALTER TABLE accounts_new RENAME TO accounts")
-            raw.commit()
-            logger.info("[Migration] Removed Donut columns from accounts")
-    except Exception as e:
-        logger.warning(f"[Migration] Could not remove Donut columns: {e}")
-
-def alter_upload_queue_add_paths():
-    """Add file_path and project_dir to upload_queue table if not present."""
-    if not IS_SQLITE:
-        return
-    try:
-        with engine.connect() as conn:
-            raw = conn.connection
-            cursor = raw.cursor()
-            existing = {row[1] for row in cursor.execute("PRAGMA table_info(upload_queue)")}
-            added = []
-            if "file_path" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN file_path VARCHAR")
-                added.append("file_path")
-            if "project_dir" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN project_dir VARCHAR")
-                added.append("project_dir")
-            if added:
-                raw.commit()
-                logger.info(f"[Migration] Added upload_queue columns: {added}")
-    except Exception as e:
-        logger.warning(f"[Migration] Could not add path columns to upload_queue: {e}")
-
-def alter_upload_queue_add_config():
-    """Add config columns to upload_queue if not present."""
-    if not IS_SQLITE:
-        return
-    try:
-        with engine.connect() as conn:
-            raw = conn.connection
-            cursor = raw.cursor()
-            existing = {row[1] for row in cursor.execute("PRAGMA table_info(upload_queue)")}
-            added = []
-            if "target_platforms" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN target_platforms TEXT")
-                added.append("target_platforms")
-            if "account_map" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN account_map TEXT")
-                added.append("account_map")
-            if "options" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN options TEXT")
-                added.append("options")
-            if "scheduled_at" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN scheduled_at DATETIME")
-                added.append("scheduled_at")
-            if "worker_state" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN worker_state VARCHAR")
-                added.append("worker_state")
-            if "job_tags" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN job_tags TEXT")
-                added.append("job_tags")
-            if "attempt_count" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN attempt_count INTEGER DEFAULT 0")
-                added.append("attempt_count")
-            if "last_error" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN last_error TEXT")
-                added.append("last_error")
-            if "last_run_at" not in existing:
-                cursor.execute("ALTER TABLE upload_queue ADD COLUMN last_run_at DATETIME")
-                added.append("last_run_at")
-            if added:
-                raw.commit()
-                logger.info(f"[Migration] Added upload_queue config columns: {added}")
-    except Exception as e:
-        logger.warning(f"[Migration] Could not add config columns to upload_queue: {e}")
-
-def alter_project_configs_add_number_n():
-    try:
-        with engine.connect() as conn:
-            inspector = inspect(conn)
-            tables = set(inspector.get_table_names())
-            if "project_configs" not in tables:
-                return
-            existing = {c["name"] for c in inspector.get_columns("project_configs")}
-            if "number_n" in existing:
-                return
-            conn.execute(text("ALTER TABLE project_configs ADD COLUMN number_n INTEGER DEFAULT 10"))
-            conn.commit()
-            logger.info("[Migration] Added project_configs column: number_n")
-    except Exception as e:
-        logger.warning(f"[Migration] Could not add number_n to project_configs: {e}")
-
-
-def alter_project_configs_add_accounts():
-    try:
-        with engine.connect() as conn:
-            inspector = inspect(conn)
-            tables = set(inspector.get_table_names())
-            if "project_configs" not in tables:
-                return
-            existing = {c["name"] for c in inspector.get_columns("project_configs")}
-            statements = []
-            if "grok_account_id" not in existing:
-                statements.append("ALTER TABLE project_configs ADD COLUMN grok_account_id VARCHAR DEFAULT ''")
-            if "whisk_account_id" not in existing:
-                statements.append("ALTER TABLE project_configs ADD COLUMN whisk_account_id VARCHAR DEFAULT ''")
-            for stmt in statements:
-                conn.execute(text(stmt))
-            if statements:
-                conn.commit()
-                logger.info("[Migration] Added project_configs columns: grok_account_id, whisk_account_id")
-    except Exception as e:
-        logger.warning(f"[Migration] Could not add grok/whisk accounts to project_configs: {e}")
 
 def run_migrations(db):
-    """Run all migrations. Called once on startup."""
-    # Column migrations MUST run before any ORM queries on the models
-    alter_accounts_add_youtube_cols()
-    remove_accounts_donut_cols()
-    alter_upload_queue_add_paths()
-    alter_upload_queue_add_config()
-    alter_project_configs_add_number_n()
-    alter_project_configs_add_accounts()
+    seed_from_legacy_sqlite(db)
     seed_accounts_from_json(db)
     seed_upload_queue_from_json(db)
     logger.info("[Migration] Migration check complete.")

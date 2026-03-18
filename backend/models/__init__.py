@@ -4,5 +4,6 @@ from backend.models.upload_queue import UploadQueueItem
 from backend.models.project_config import ProjectConfig
 from backend.models.asset_metadata import AssetMetadata
 from backend.models.generation_task import GenerationTask
+from backend.models.realtime_event import RealtimeEvent
 
-__all__ = ["Account", "UploadQueueItem", "ProjectConfig", "AssetMetadata", "GenerationTask"]
+__all__ = ["Account", "UploadQueueItem", "ProjectConfig", "AssetMetadata", "GenerationTask", "RealtimeEvent"]

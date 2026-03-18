@@ -1,8 +1,8 @@
 """ProjectConfig ORM Model — stores per-project settings and prompts list."""
-import json
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.sql import func
 from backend.core.database import Base
+from backend.core.sqltypes import JSON_VALUE, UTC_DATETIME
 
 
 class ProjectConfig(Base):
@@ -19,17 +19,14 @@ class ProjectConfig(Base):
     suffix = Column(String, default="")
     grok_account_id = Column(String, default="")
     whisk_account_id = Column(String, default="")
-    _prompts_json = Column("prompts_json", Text, default="[]")  # JSON array of strings
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    _prompts_json = Column("prompts_json", JSON_VALUE, default=list)  # JSON array of strings
+    created_at = Column(UTC_DATETIME, server_default=func.now())
+    updated_at = Column(UTC_DATETIME, server_default=func.now(), onupdate=func.now(), index=True)
 
     @property
     def prompts(self) -> list:
-        try:
-            return json.loads(self._prompts_json or "[]")
-        except Exception:
-            return []
+        return self._prompts_json or []
 
     @prompts.setter
     def prompts(self, value: list):
-        self._prompts_json = json.dumps(value)
+        self._prompts_json = value or []
