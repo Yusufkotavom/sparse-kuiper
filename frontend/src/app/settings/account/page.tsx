@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,11 @@ export default function AccountSettingsPage() {
 
   useEffect(() => {
     const loadUser = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        router.replace("/login");
+        return;
+      }
       const { data } = await supabase.auth.getUser();
       const user = data.user;
       if (!user) {
@@ -37,6 +42,8 @@ export default function AccountSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
       await supabase.auth.updateUser({
         data: {
           full_name: fullName,
@@ -50,6 +57,8 @@ export default function AccountSettingsPage() {
   const handleSignOutAll = async () => {
     setSigningOut(true);
     try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
       await supabase.auth.signOut();
       router.push("/login");
       router.refresh();

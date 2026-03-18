@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 
@@ -74,12 +74,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const getUser = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       setLoading(false);
     };
 
     getUser();
+
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
@@ -102,7 +111,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     router.push("/");
     router.refresh();
   };

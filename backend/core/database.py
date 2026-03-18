@@ -4,6 +4,7 @@ Database configuration - SQLAlchemy engine, session factory, and dependency inje
 Supabase/PostgreSQL is required.
 """
 import os
+import psycopg
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -25,6 +26,7 @@ engine_kwargs["pool_pre_ping"] = True
 engine_kwargs["pool_recycle"] = 300
 engine_kwargs["pool_size"] = int(os.environ.get("DATABASE_POOL_SIZE", "10"))
 engine_kwargs["max_overflow"] = int(os.environ.get("DATABASE_MAX_OVERFLOW", "20"))
+engine_kwargs["connect_args"] = {"prepare_threshold": None, "cursor_factory": psycopg.ClientCursor}
 
 engine = create_engine(
     DATABASE_URL,

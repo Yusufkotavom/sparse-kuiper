@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, Bug, PlayCircle, Rocket } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function PlaywrightLabPage() {
   const router = useRouter();
@@ -30,6 +30,11 @@ export default function PlaywrightLabPage() {
 
   useEffect(() => {
     const ensureAuthed = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        router.replace("/login");
+        return;
+      }
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
         router.replace("/login");

@@ -11,7 +11,7 @@ import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
 import { FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyProjectManagerCard, type ProjectType } from "@/components/organisms/ProjectManagerCard";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { QueueItem } from "@/lib/api";
@@ -138,6 +138,11 @@ export default function ProjectOverviewPage() {
 
   useEffect(() => {
     const ensureAuthAndLoad = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        router.replace("/login");
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         router.replace("/login");

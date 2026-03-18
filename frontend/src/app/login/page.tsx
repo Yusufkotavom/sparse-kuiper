@@ -4,13 +4,15 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LoginForm } from "@/components/login-form"
 import { GalleryVerticalEndIcon } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
 
   useEffect(() => {
     const checkSession = async () => {
+      const supabase = getSupabaseClient()
+      if (!supabase) return
       const { data } = await supabase.auth.getSession()
       if (data.session) {
         router.replace("/dashboard")

@@ -1,6 +1,6 @@
 import os
 import json
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
 # Base paths
@@ -12,9 +12,15 @@ UPLOAD_QUEUE_DIR = BASE_DIR / "upload_queue"
 SESSIONS_DIR = BASE_DIR / "data" / "sessions"
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"))
+
     app_name: str = "AIO Super App API"
     environment: str = "development"
     database_url: str = ""
+
+    database_pool_size: int = 10
+    database_max_overflow: int = 20
+    enable_legacy_imports: bool = False
     
     # Placeholder for Groq API Key (loaded from config.json or env)
     groq_api_key: str = ""
@@ -25,9 +31,6 @@ class Settings(BaseSettings):
     azure_openai_endpoint: str = ""
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = ""
-
-    class Config:
-        env_file = ".env"
 
 settings = Settings()
 

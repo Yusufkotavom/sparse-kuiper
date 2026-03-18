@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
 
 export default function LandingPage() {
@@ -25,11 +25,19 @@ export default function LandingPage() {
 
   useEffect(() => {
     const loadSession = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setUser(null);
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       setUser(data.session?.user ?? null);
     };
 
     loadSession();
+
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 import { AuthError } from "@supabase/supabase-js"
 import {
   Field,
@@ -40,6 +40,12 @@ export function SignupForm({
     }
 
     try {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        setError("Supabase belum dikonfigurasi.")
+        return
+      }
+
       const { error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -64,6 +70,12 @@ export function SignupForm({
 
   async function handleOAuthSignup(provider: 'github' | 'google') {
     try {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        setError("Supabase belum dikonfigurasi.")
+        return
+      }
+
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

@@ -6,14 +6,25 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 const realtimeSchema = process.env.NEXT_PUBLIC_SUPABASE_REALTIME_SCHEMA || "public";
 
-function createRequiredSupabaseClient(): SupabaseClient {
+let cachedClient: SupabaseClient | null | undefined;
+
+export function getSupabaseClient(): SupabaseClient | null {
+  if (cachedClient !== undefined) return cachedClient;
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY wajib diisi.");
+    cachedClient = null;
+    return null;
   }
-  return createClient(supabaseUrl, supabaseAnonKey);
+  cachedClient = createClient(supabaseUrl, supabaseAnonKey);
+  return cachedClient;
 }
 
-export const supabase = createRequiredSupabaseClient();
+export function requireSupabaseClient(): SupabaseClient {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY wajib diisi.");
+  }
+  return client;
+}
 
 export type RealtimeEventRecord = {
   id: number;
@@ -29,6 +40,11 @@ export function subscribeToRealtimeStream(
   stream: string,
   onEvent: (event: RealtimeEventRecord) => void
 ) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return { unsubscribe: () => {} };
+  }
+
   const channel = supabase
     .channel(`realtime-events:${stream}`)
     .on(

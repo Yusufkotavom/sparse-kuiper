@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 import { AuthError } from "@supabase/supabase-js"
 import {
   Card,
@@ -39,6 +39,12 @@ export function LoginForm({
     setError(null)
 
     try {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        setError("Supabase belum dikonfigurasi.")
+        return
+      }
+
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -58,6 +64,12 @@ export function LoginForm({
 
   async function handleOAuthLogin(provider: 'apple' | 'google') {
     try {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        setError("Supabase belum dikonfigurasi.")
+        return
+      }
+
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

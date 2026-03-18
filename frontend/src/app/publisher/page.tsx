@@ -13,7 +13,7 @@ import { Loader2, Share2, Video as VideoIcon, RefreshCw, Youtube, Instagram, Fac
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { cn } from "@/lib/utils";
-import { supabase, subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
+import { getSupabaseClient, subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
 
 import { getApiBase } from "@/lib/api";
 const STATIC_BASE = () => `${getApiBase()}/upload_queue_static/`;
@@ -69,6 +69,11 @@ function PublisherContent() {
 
     useEffect(() => {
         const ensureAuthAndLoad = async () => {
+            const supabase = getSupabaseClient();
+            if (!supabase) {
+                router.replace("/login");
+                return;
+            }
             const { data } = await supabase.auth.getSession();
             if (!data.session) {
                 router.replace("/login");

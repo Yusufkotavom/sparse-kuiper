@@ -7,7 +7,7 @@ import { videoApi, kdpApi } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, FolderOpen, Video, BookOpen } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type DashboardProject = {
   name: string;
@@ -21,6 +21,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const ensureAuthAndLoad = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        router.replace("/login");
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         router.replace("/login");

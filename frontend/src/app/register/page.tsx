@@ -5,13 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignupForm } from "@/components/signup-form";
 import { GalleryVerticalEndIcon } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
   const router = useRouter();
 
   useEffect(() => {
     const checkSession = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) return;
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         router.replace("/dashboard");

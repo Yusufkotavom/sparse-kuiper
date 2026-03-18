@@ -2,13 +2,18 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 
 export default function AuthCallbackPage() {
   const router = useRouter()
 
   useEffect(() => {
     const completeAuth = async () => {
+      const supabase = getSupabaseClient()
+      if (!supabase) {
+        router.replace("/login")
+        return
+      }
       const { data } = await supabase.auth.getSession()
       router.replace(data.session ? "/dashboard" : "/login")
     }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { videoApi, kdpApi } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { PageHeader } from "@/components/atoms/PageHeader";
 import { KpiCard } from "@/components/atoms/KpiCard";
 import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
@@ -24,6 +24,11 @@ export default function ProjectManagerPage() {
 
   useEffect(() => {
     const ensureAuthAndLoad = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        router.replace("/login");
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         router.replace("/login");
