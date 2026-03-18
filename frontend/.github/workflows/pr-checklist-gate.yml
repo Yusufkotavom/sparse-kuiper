@@ -1,0 +1,41 @@
+name: PR Checklist Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  required-checklist:
+    name: Required PR checklist completed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required PR checklist items
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request?.body || "";
+
+            const requiredItems = [
+              "UI Planning Review selesai",
+              "Contract API/Schema disetujui",
+              "Regression test old/new path ada",
+              "Observability minimum (request-id/log/metric) aktif",
+              "E2E/screenshot untuk perubahan UI",
+              "Staged rollout plan tersedia"
+            ];
+
+            const missing = requiredItems.filter((item) => {
+              const escaped = item.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
+              const checkedPattern = new RegExp(`-\\s*\\[x\\]\\s*${escaped}`, "i");
+              return !checkedPattern.test(body);
+            });
+
+            if (missing.length > 0) {
+              core.setFailed(
+                `Checklist wajib belum lengkap. Item yang belum dicentang: ${missing.join("; ")}`
+              );
+            }

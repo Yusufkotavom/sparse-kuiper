@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant light (&:is(.light *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-foreground: var(--foreground);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--elevated);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--elevated);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--elevated);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--error);
+  --color-destructive-foreground: var(--primary-foreground);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --width-sidebar: var(--sidebar-w);
+  --width-sidebar-collapsed: var(--sidebar-collapsed-w);
+  --height-topbar: var(--topbar-h);
+  --height-bottomnav: var(--bottomnav-h);
+}
+
+/* Dark mode (default) */
+:root, .dark {
+  /* Backgrounds */
+  --background: hsl(0 0% 4%);          /* #0a0a0a */
+  --surface: hsl(0 0% 8%);             /* #141414 */
+  --elevated: hsl(0 0% 11%);           /* #1c1c1c */
+
+  /* Borders */
+  --border: hsl(0 0% 16%);             /* #292929 */
+  --border-hover: hsl(0 0% 24%);       /* #3d3d3d */
+
+  /* Text */
+  --foreground: hsl(0 0% 93%);         /* #ededed */
+  --muted-foreground: hsl(0 0% 42%);   /* #6b6b6b */
+
+  /* Accent (single color = biru) */
+  --primary: hsl(212 100% 60%);        /* #3b82f6 */
+  --primary-foreground: hsl(0 0% 100%);
+
+  /* State colors */
+  --success: hsl(142 60% 45%);         /* #22c55e */
+  --warning: hsl(38 95% 55%);          /* #f59e0b */
+  --error: hsl(0 70% 55%);             /* #ef4444 */
+
+  /* Layout dimensions */
+  --topbar-h: 48px;
+  --sidebar-w: 220px;
+  --sidebar-collapsed-w: 60px;
+  --bottomnav-h: 64px;
+
+  /* Spacing & Padding tokens */
+  --section-px: 1rem;       /* 16px mobile */
+  --section-py: 1.5rem;     /* 24px mobile */
+  --card-p: 1rem;           /* 16px mobile */
+  --gap-base: 1rem;         /* 16px mobile */
+
+  --radius: 0.5rem;
+}
+
+/* Tablet/Desktop overrides */
+@media (min-width: 768px) {
+  :root, .dark {
+    --section-px: 2.5rem;   /* 40px desktop */
+    --section-py: 3rem;     /* 48px desktop */
+    --card-p: 1.5rem;       /* 24px desktop */
+    --gap-base: 1.5rem;     /* 24px desktop */
+  }
+}
+
+/* Light mode - minimal support for now, matches dark palette if forced */
+.light {
+  --background: hsl(0 0% 98%);
+  --surface: hsl(0 0% 100%);
+  --elevated: hsl(0 0% 96%);
+  --border: hsl(0 0% 89%);
+  --border-hover: hsl(0 0% 80%);
+  --foreground: hsl(0 0% 10%);
+  --muted-foreground: hsl(0 0% 45%);
+  --primary: hsl(212 100% 45%);
+  --primary-foreground: hsl(0 0% 100%);
+  --success: hsl(142 60% 40%);
+  --warning: hsl(38 95% 45%);
+  --error: hsl(0 70% 45%);
+  --radius: 0.5rem;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 9999px;
+}
+
+/* React DatePicker Dark Theme Overrides */
+.react-datepicker {
+  background-color: #18181b !important;
+  border: 1px solid #27272a !important;
+  color: #fafafa !important;
+  font-family: inherit !important;
+}
+.react-datepicker__header {
+  background-color: #09090b !important;
+  border-bottom: 1px solid #27272a !important;
+}
+.react-datepicker__current-month, .react-datepicker-time__header, .react-datepicker-year-header {
+  color: #fafafa !important;
+}
+.react-datepicker__day-name, .react-datepicker__day, .react-datepicker__time-name {
+  color: #fafafa !important;
+}
+.react-datepicker__day:hover, .react-datepicker__month-text:hover, .react-datepicker__quarter-text:hover, .react-datepicker__year-text:hover {
+  background-color: #27272a !important;
+}
+.react-datepicker__day--selected, .react-datepicker__day--in-selecting-range, .react-datepicker__day--in-range, .react-datepicker__month-text--selected, .react-datepicker__month-text--in-selecting-range, .react-datepicker__month-text--in-range, .react-datepicker__quarter-text--selected, .react-datepicker__quarter-text--in-selecting-range, .react-datepicker__quarter-text--in-range, .react-datepicker__year-text--selected, .react-datepicker__year-text--in-selecting-range, .react-datepicker__year-text--in-range {
+  background-color: #7c3aed !important;
+  color: #fff !important;
+}
+.react-datepicker__day--keyboard-selected, .react-datepicker__month-text--keyboard-selected, .react-datepicker__quarter-text--keyboard-selected, .react-datepicker__year-text--keyboard-selected {
+  background-color: #4c1d95 !important;
+}
+.react-datepicker__time-container {
+  border-left: 1px solid #27272a !important;
+}
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item {
+  background-color: #18181b !important;
+  color: #fafafa !important;
+}
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item:hover {
+  background-color: #27272a !important;
+}
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
+  background-color: #7c3aed !important;
+  color: #fff !important;
+  font-weight: bold !important;
+}
+.react-datepicker-popper {
+  z-index: 9999 !important;
+}
+.datepicker-popper-high {
+  z-index: 9999 !important;
+}

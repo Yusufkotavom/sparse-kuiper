@@ -1,0 +1,1500 @@
+plan for migration db ke realtime supabase
+
+
+
+Worked for 5m 15s
+Plan
+
+
+
+Migrasi DB ke Supabase Realtime
+Summary
+Migrasi dilakukan dengan menjadikan Supabase Postgres sebagai database utama untuk seluruh data operasional, tetapi seluruh write tetap lewat FastAPI/SQLAlchemy. Frontend tidak write langsung ke tabel operasional; realtime dipakai terutama untuk sinkronisasi UI, dengan polling/fetch lama tetap dipertahankan sebagai fallback selama rollout. Scope migrasi ini hanya database state aplikasi, bukan file artefak di projects/, video_projects/, upload_queue/, atau sidecar metadata di disk.
+
+Key Changes
+Ganti DATABASE_URL backend agar menunjuk ke Supabase Postgres pooled connection; backend/core/database.py tetap menjadi satu pintu akses ORM.
+Hapus asumsi SQLite-only di startup/migration flow:
+create_all_tables() tetap dipakai hanya sebagai bootstrap sementara.
+backend/core/migrations.py difokuskan ulang menjadi seed one-time dari data/accounts.json, upload_queue/status.json, dan JSON legacy lain ke Postgres.
+Semua logika SQLite khusus seperti WAL/raw sqlite connection dianggap legacy dan tidak dipakai untuk target akhir.
+Tetapkan tabel canonical fase migrasi:
+accounts
+generation_tasks
+upload_queue
+project_configs
+asset_metadata
+Tambahkan tabel event/outbox realtime_events untuk semua perubahan status penting.
+Kolom: id bigserial, stream, event_type, entity_table, entity_id, payload jsonb, created_at timestamptz default now()
+Index: (stream, id), (entity_table, entity_id), (created_at)
+Stream awal: accounts, generation_tasks, upload_queue, project_configs, asset_metadata
+Terapkan dual-write di backend service/router:
+update tabel utama
+tulis event ke realtime_events dalam transaksi yang sama
+Ubah field JSON text di model yang sekarang masih stringified JSON agar di Postgres menjadi JSONB:
+accounts.oauth_token_json
+upload_queue.platform_statuses
+upload_queue.target_platforms
+upload_queue.account_map
+upload_queue.options
+upload_queue.job_tags
+project_configs.prompts_json
+generation_tasks.input_json
+generation_tasks.result_json
+Pisahkan data yang tetap file-based dan tidak dimigrasikan pada fase ini:
+file media/video/gambar
+prompt files per project
+.meta.json/info.json sidecar yang hanya jadi sumber fallback selama masa transisi
+Tambahkan bridge realtime di frontend:
+buat util subscription terpusat di frontend/src/lib/supabase.ts atau helper baru
+halaman yang sekarang polling status (publisher, accounts, generation, looper, logs bila relevan) subscribe ke stream Supabase dan merge update ke state lokal
+setiap halaman tetap melakukan initial snapshot via API, lalu apply incremental events
+Rollout frontend dilakukan urut:
+upload_queue dan publisher jobs
+generation_tasks
+accounts status/login connection
+project_configs dan asset_metadata
+Security model untuk fase awal:
+environment internal, read akses realtime cukup longgar
+write tabel operasional tetap hanya backend
+frontend memakai Supabase auth/session yang sudah ada untuk subscribe, tapi tanpa direct table writes
+jika perlu cepat, subscribe ke realtime_events read-only lebih dulu daripada expose semua tabel operasional
+Public Interfaces / API
+REST API lama dipertahankan supaya frontend existing tetap jalan.
+Tambahkan endpoint sinkronisasi/diagnostik backend:
+GET /api/v1/realtime/health
+GET /api/v1/realtime/events?stream=...&after_id=...&limit=...
+Bentuk event payload distandardkan:
+stream
+event_type
+entity_table
+entity_id
+payload
+created_at
+Kontrak UI:
+halaman selalu load snapshot awal via API
+setelah itu apply event incremental
+bila subscription putus, fallback ke refetch/polling existing
+Test Plan
+Backend smoke:
+start FastAPI dengan DATABASE_URL Supabase
+verifikasi startup tidak lagi bergantung pada SQLite behavior
+verifikasi seed legacy JSON hanya jalan sekali dan idempotent
+Data correctness:
+create/update/delete accounts, upload_queue, generation_tasks, project_configs, asset_metadata
+pastikan row utama berubah dan realtime_events ikut tercatat dalam transaksi yang sama
+pastikan worker/background job yang memakai SessionLocal() tetap konsisten
+Realtime:
+subscribe dari frontend ke stream upload_queue dan generation_tasks
+trigger perubahan status dari backend worker
+verifikasi UI berubah tanpa refresh
+putuskan koneksi realtime dan pastikan fallback refetch masih memulihkan state
+Regression:
+accounts OAuth connect/disconnect
+publisher queue add/update/archive/upload
+generation create/cancel/complete/fail
+config load/save untuk video dan KDP
+Rollback drill:
+matikan subscription frontend
+pakai full snapshot/polling lama
+backend tetap berfungsi walau event consumer dimatikan
+Assumptions
+Supabase yang dipakai adalah hosted Postgres + Realtime, bukan hanya Auth.
+Migrasi ini tidak memindahkan file storage ke Supabase Storage.
+Implementasi memilih pendekatan bertahap walaupun target akhir adalah full app data, agar publisher/generation yang paling sensitif realtime selesai lebih dulu.
+create_all_tables() boleh dipakai sementara, tetapi target akhir sebaiknya pindah ke migration tool yang eksplisit agar schema Postgres/Supabase terkontrol.
+Untuk fase awal internal, realtime difokuskan ke realtime_events dan tabel status; route non-status yang masih file-backed tetap boleh baca dari disk sampai fase lanjutan.
+saya ingin integrasi lebih cepat, memakai realtime, beri saran
+
+Plan
+
+
+
+Fast-Track Supabase Realtime Integration
+Summary
+Kalau tujuan utamanya integrasi cepat, jangan migrasikan semua tabel sekaligus. Jalur tercepat adalah tetap biarkan FastAPI sebagai writer, pindahkan database ke Supabase Postgres, lalu aktifkan realtime hanya untuk state yang memang sering berubah di UI. Fokus awal sebaiknya upload_queue, generation_tasks, dan accounts.status; area lain tetap lewat API biasa dulu.
+
+Recommended Approach
+Pakai Supabase Postgres sebagai pengganti SQLite sekarang dengan mengubah DATABASE_URL; ini memberi fondasi yang sama untuk ORM existing tanpa refactor besar.
+Jangan mulai dari direct frontend writes. Semua create/update tetap lewat FastAPI dan worker existing supaya logika bisnis tidak pecah.
+Untuk realtime paling cepat, subscribe langsung ke perubahan row tabel target atau ke satu tabel realtime_events tipis.
+Saran tercepat untuk repo ini: mulai dengan realtime_events, bukan expose semua tabel dulu.
+Backend selesai update data utama
+Backend insert 1 event ringkas ke realtime_events
+Frontend subscribe ke stream itu dan refetch row terkait atau patch state lokal
+Pertahankan polling lama sebagai fallback sampai stabil; jangan hapus dulu.
+Why This Is Faster
+SQLAlchemy, router, dan worker existing tetap dipakai hampir apa adanya.
+Frontend tidak perlu dirombak jadi Supabase-first.
+Risiko auth/RLS lebih kecil karena write path tetap tunggal di backend.
+Realtime bisa hidup dulu untuk halaman yang paling terasa manfaatnya tanpa menunggu migrasi full schema dan storage.
+First Rollout
+Pindahkan DB backend ke Supabase Postgres.
+Tambah tabel realtime_events dan helper backend untuk publish event setelah commit perubahan penting.
+Hubungkan halaman publisher ke realtime untuk status queue/job.
+Hubungkan halaman generation ke realtime untuk queued/running/succeeded/failed.
+Tambahkan update realtime ringan di halaman accounts untuk status, channel_title, dan login state.
+Biarkan project_configs, asset sidecar, dan data file-based tetap non-realtime dulu.
+Event Shape
+Gunakan payload sederhana supaya cepat diimplementasikan:
+
+stream
+event_type
+entity_id
+summary
+payload
+created_at
+Contoh stream awal:
+
+upload_queue
+generation_tasks
+accounts
+Acceptance Criteria
+Publisher queue berubah status tanpa refresh.
+Generation progress/update tampil tanpa polling utama.
+Account status/login refresh otomatis saat worker update DB.
+Kalau realtime putus, API snapshot/polling lama tetap membuat UI usable.
+Assumptions
+Prioritas adalah kecepatan delivery, bukan schema ideal final.
+Lingkungan masih internal, jadi read access realtime bisa dibuat sederhana dulu.
+File media dan folder projects/, video_projects/, upload_queue/ belum dipindah ke Supabase Storage pada fase cepat ini.
+jelaskan tipe2 db dulu, project mengunakan sekarang ketika load banyak file crash
+
+Di project ini sekarang ada beberapa “lapisan penyimpanan”, dan itu penting dibedakan karena problem load banyak file lalu crash belum tentu murni salah database.
+
+Tipe penyimpanan yang dipakai sekarang
+
+SQLite: ini DB utama state aplikasi saat ini. Dari repo, backend default ke file [backend/core/database.py](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\backend\core\database.py) yang membuat nomad_hub.db. Tabel ORM yang aktif antara lain accounts, upload_queue, generation_tasks, project_configs, dan asset_metadata.
+JSON/Text di dalam DB: beberapa field bukan kolom relasional murni, tapi JSON yang disimpan sebagai Text, misalnya di [backend/models/upload_queue.py](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\backend\models\upload_queue.py) dan [backend/models/project_config.py](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\backend\models\project_config.py). Jadi datanya ada di DB, tapi bentuknya masih semi-file/semi-document.
+File system storage: file media tetap disimpan di folder runtime seperti projects/, video_projects/, upload_queue/. Backend bahkan mount folder ini sebagai static files di [backend/main.py](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\backend\main.py).
+Legacy JSON files: ada migrasi awal dari data/accounts.json dan upload_queue/status.json ke SQLite di [backend/core/migrations.py](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\backend\core\migrations.py). Jadi project ini historisnya file-based, lalu dipindah sebagian ke DB.
+Supabase Auth: frontend sudah pakai Supabase untuk auth/session di [frontend/src/lib/supabase.ts](C:\Users\admin\Desktop\New folder (4)\sparse-kuiper\frontend\src\lib\supabase.ts), tapi belum dipakai sebagai DB utama data operasional.
+Database jenis apa saja secara umum
+
+Relational DB: PostgreSQL, MySQL, SQLite. Cocok untuk data terstruktur, query, relasi, transaksi.
+Embedded DB: SQLite. Cepat dipasang, satu file, enak untuk local app/single-node, tapi kurang nyaman untuk concurrency tinggi dan workload besar.
+Server DB: PostgreSQL/MySQL. Lebih kuat untuk multi-user, banyak write/read paralel, indexing, JSONB, replication, realtime integration.
+Document DB: misalnya MongoDB. Cocok untuk document fleksibel, tapi bukan jalur paling natural untuk repo ini karena sudah ORM SQLAlchemy dan model relasional.
+Object/File storage: local disk, S3, Supabase Storage. Ini untuk file besar; jangan dicampur dengan DB row.
+Yang dipakai project sekarang
+
+State aplikasi: SQLite
+Auth frontend: Supabase Auth
+File besar/media: local filesystem
+Sebagian metadata kecil: DB + JSON text fields
+Jadi saat ini arsitekturnya bukan “full database app”, tapi hybrid DB + file system.
+Kenapa load banyak file bisa crash
+Kemungkinan besar sumber masalahnya kombinasi ini:
+
+Banyak file di disk, bukan banyak row DB. Folder seperti video_projects/<project>/raw_videos dan projects/... masih dibaca langsung dari filesystem.
+Frontend polling/refetch di beberapa halaman. Dari repo ada banyak setInterval, jadi saat data besar UI bisa mengulang fetch dan render berat.
+SQLite + single-file DB bisa ikut terasa berat saat banyak update paralel dari worker/upload/generation, apalagi bersamaan dengan scan file dan metadata.
+Metadata tersebar: sebagian di DB, sebagian di .json sidecar, sebagian di folder. Saat halaman load, backend bisa perlu gabungkan banyak sumber.
+Static file/path-heavy workflow: publisher/looper/video flow banyak bergantung pada operasi path dan file scan, jadi bottleneck bisa I/O memory, bukan query SQL saja.
+Jadi kalau “load banyak file crash”, dugaan saya akar utamanya:
+
+file listing dan metadata loading terlalu berat,
+polling terlalu sering,
+SQLite kurang ideal untuk concurrent state updates,
+dan arsitektur state masih campur DB + filesystem.
+Saran arah tercepat
+Kalau target Anda “lebih cepat dan realtime”, saya sarankan jangan mulai dari semua file dipindah dulu. Urutannya:
+
+Pindah state DB dari SQLite ke Supabase Postgres.
+Biarkan file media tetap di disk dulu.
+Tambah realtime hanya untuk status: upload_queue, generation_tasks, accounts.status.
+Kurangi beban halaman dengan initial snapshot + incremental realtime, bukan scan/refetch penuh terus-menerus.
+Untuk folder yang isinya ribuan file, tambahkan pagination/indexing metadata, jangan baca semua file setiap render.
+Kalau Anda mau, next saya bisa bantu buat perbandingan SQLite vs PostgreSQL/Supabase khusus untuk kasus project ini, lalu saya rekomendasikan mana yang paling cocok untuk mengatasi crash saat load banyak file.
+
+
+migrasi sepenuhnya ke supabase
+PostgreSQL/Supabase
+
+Plan
+
+
+
+Full Migration to Supabase PostgreSQL
+Summary
+Migrasi penuh berarti seluruh state aplikasi yang saat ini ada di SQLite dipindahkan ke Supabase PostgreSQL sebagai database utama, dan backend FastAPI tetap menjadi satu-satunya writer. Supabase dipakai untuk dua hal: Postgres sebagai source of truth dan Realtime untuk incremental UI updates. Frontend tetap memakai API backend untuk write/read snapshot utama, lalu subscribe realtime untuk update status.
+
+Key Changes
+Jadikan Supabase Postgres sebagai DATABASE_URL tunggal di backend; SQLite tidak lagi dipakai untuk runtime normal.
+Pindahkan semua tabel ORM aktif ke Postgres:
+accounts
+generation_tasks
+upload_queue
+project_configs
+asset_metadata
+Ubah kolom JSON-string/Text yang sekarang dipakai sebagai pseudo-document menjadi tipe Postgres yang sesuai, utamanya JSONB.
+Ganti alur startup yang masih SQLite-oriented:
+hapus ketergantungan pada WAL/raw sqlite migration path
+migrasi sepenuhnya ke supabase
+PostgreSQL/Supabase
+
+Saya tangkap arahnya: kita anggap target akhir adalah full migration state aplikasi ke Supabase Postgres, bukan hybrid SQLite lagi. Saya akan kunci plan final dengan asumsi ini dan memastikan batasnya jelas antara database, realtime, dan file storage supaya implementernya tidak perlu menebak-nebak.
+
+
+Plan
+
+
+
+Full Migration ke Supabase PostgreSQL
+Summary
+Target akhir adalah memindahkan seluruh state aplikasi dari SQLite ke Supabase PostgreSQL dan menjadikan Supabase Realtime sebagai jalur update UI utama untuk state yang berubah cepat. FastAPI tetap menjadi lapisan backend utama dan single writer untuk business logic; frontend tidak write langsung ke tabel operasional. File media dan artefak proyek tetap di filesystem pada fase database migration ini, kecuali ada proyek lanjutan terpisah untuk memindahkan storage ke Supabase Storage.
+
+Key Changes
+Jadikan Supabase Postgres sebagai database canonical dengan mengganti DATABASE_URL backend dan menghapus ketergantungan runtime pada SQLite.
+Hentikan flow startup yang bergantung pada perilaku SQLite:
+hapus/arsipkan pragmas WAL dan raw SQLite migration path
+ubah seed migrasi agar mengimpor legacy JSON/file-based state ke Postgres secara idempotent
+Migrasikan seluruh model operasional saat ini ke schema Postgres:
+accounts
+generation_tasks
+upload_queue
+project_configs
+asset_metadata
+Refactor kolom JSON-string menjadi tipe Postgres yang native agar query dan realtime lebih stabil:
+ubah field JSON berbasis Text menjadi JSONB
+pakai TIMESTAMPTZ untuk semua timestamp penting
+tambahkan index pada kolom status, updated_at, dan foreign lookup yang sering dipakai UI/worker
+Tambahkan tabel realtime_events sebagai outbox kanonik untuk incremental sync.
+event ditulis oleh backend di transaksi yang sama dengan perubahan row utama
+stream awal: accounts, generation_tasks, upload_queue, project_configs, asset_metadata
+frontend subscribe ke stream ini untuk patch state atau trigger refetch granular
+Standarkan ownership data:
+backend routers dan workers tetap melakukan seluruh create/update/delete
+frontend hanya baca snapshot via API dan subscribe realtime via Supabase
+Supabase Auth yang sudah ada tetap dipakai untuk session frontend
+Refactor titik-titik background write yang saat ini membuat session manual agar aman di Postgres:
+worker uploader
+generation service
+playwright login/status updater
+job scheduler/publisher background tasks
+Ubah halaman frontend dari full polling ke model:
+initial snapshot via REST API
+incremental realtime subscription
+fallback refetch ketika subscription gagal atau reconnect
+Data file-based yang tetap di luar scope DB migration:
+media di projects/, video_projects/, upload_queue/
+file prompt/artifact lokal
+sidecar .json yang berisi metadata harus diperlakukan sebagai legacy source dan secara bertahap dipindahkan ke tabel DB bila masih dipakai operasional
+Public Interfaces / Contracts
+REST API existing tetap dipertahankan agar rollout tidak mematahkan UI.
+Tambahkan kontrak realtime internal yang stabil:
+stream
+event_type
+entity_table
+entity_id
+payload
+created_at
+Tambahkan endpoint backend observability untuk rollout:
+health koneksi Postgres/Supabase
+replay incremental events berdasarkan after_id
+Kontrak frontend:
+setiap halaman load snapshot sekali
+update berikutnya datang dari realtime
+reconnect harus aman dan idempotent
+Kontrak migration:
+migrasi JSON/file legacy ke Postgres harus bisa dijalankan ulang tanpa duplikasi row
+backend tidak boleh lagi mengandalkan SQLite-only behavior setelah cutover
+Implementation Sequence
+Siapkan project Supabase, connection string pooled, env backend/frontend, dan schema dasar Postgres.
+Port seluruh model SQLAlchemy ke bentuk yang kompatibel dengan Postgres native types.
+Implement one-time migration/import dari SQLite/JSON legacy ke Supabase Postgres.
+Cut backend ke Supabase Postgres dan verifikasi semua router + worker read/write normal.
+Tambahkan realtime_events dan helper publish event terpusat di backend.
+Rollout realtime frontend untuk:
+publisher/upload_queue
+generation_tasks
+accounts
+Kurangi polling lama menjadi fallback only.
+Migrasikan pembacaan metadata legacy yang masih dari sidecar file ke DB bila masih jadi bottleneck.
+Setelah stabil, hapus path SQLite dan migration seed yang tidak lagi diperlukan.
+Test Plan
+Startup backend berhasil dengan Supabase DATABASE_URL dan tanpa SQLite path aktif.
+Seed/migrasi dari legacy source menghasilkan row lengkap dan idempotent.
+CRUD penuh untuk accounts, upload_queue, generation_tasks, project_configs, dan asset_metadata tetap lolos.
+Worker/background task tetap bisa update status paralel tanpa lock/error khas SQLite.
+Frontend publisher, accounts, dan flow generation menerima update realtime tanpa refresh.
+Reconnect test:
+putuskan subscription
+jalankan perubahan status di backend
+reconnect dan sinkronisasi state kembali benar
+Load test ringan:
+banyak update queue/job dalam waktu berdekatan
+verifikasi Postgres + realtime lebih stabil dibanding polling snapshot penuh
+Rollback test:
+nonaktifkan subscription realtime
+UI tetap berjalan dengan REST snapshot/refetch
+Assumptions
+“Migrasi sepenuhnya ke Supabase” berarti seluruh database state pindah ke Supabase PostgreSQL, bukan memindahkan file media ke Supabase Storage pada tahap ini.
+FastAPI tetap dipertahankan sebagai backend utama; tidak ada direct write dari frontend ke tabel operasional.
+Supabase Realtime dipakai untuk konsumsi perubahan, bukan sebagai pengganti business logic backend.
+Security dapat dimulai sederhana untuk environment internal, lalu diperketat setelah cutover stabil.
+Implementasi akhir sebaiknya memakai migration workflow yang eksplisit untuk Postgres/Supabase, bukan hanya Base.metadata.create_all(), agar schema production terkendali.
+Implement plan
+
+Saya mulai implement dari fondasi backend dulu: koneksi Postgres/Supabase, model schema, dan outbox realtime. Setelah itu saya sambungkan router/worker yang paling penting lalu baru masuk ke subscription frontend agar perubahan ini nyambung end-to-end.
+
+Ran git status --short
+
+
+Ran Get-Content backend\core\migrations.py -TotalCount 320
+
+
+Ran Get-Content backend\routers\generation.py -TotalCount 260
+
+
+Ran Get-Content backend\routers\publisher_queue.py -TotalCount 260
+
+
+Ran Get-Content frontend\src\app\accounts\page.tsx -TotalCount 240
+
+
+Ran Get-Content frontend\src\app\publisher\page.tsx -TotalCount 260
+
+
+Saya sudah lihat migrasi lama masih sangat SQLite-specific, sementara frontend publisher/accounts masih snapshot-based. Berikutnya saya akan buat layer kompatibilitas Postgres + event publishing dulu supaya perubahan di router/worker bisa mengikuti satu pola yang sama, bukan patch tercecer.
+
+Ran Get-Content backend\routers\accounts.py -TotalCount 240
+
+
+Ran Get-Content backend\models\__init__.py -TotalCount 220
+
+
+Ran Get-Content backend\requirements.txt -TotalCount 220
+
+
+Ran Get-Content backend\services\generation_service.py -TotalCount 280
+
+
+Saya sudah konfirmasi requirement psycopg dan alembic sudah tersedia, jadi kita tidak perlu nambah dependency inti untuk Postgres. Sekarang saya masuk ke edit fondasi model/database dan event helper, lalu saya wire ke router yang paling sering menulis data.
+
+Ran Get-Content backend\routers\publisher.py -TotalCount 220
+
+
+Ran Get-Content frontend\src\lib\api.ts -TotalCount 980
+
+
+Ran Get-ChildItem -Recurse backend\routers,backend\services -Include *.py | Select-String -Pattern 'db\.commit\(|SessionLocal\(|db\.add\(|db\.delete\(' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }
+
+
+Ran Get-Content backend\services\playwright_login.py -TotalCount 320
+
+
+Ran Get-Content backend\routers\publisher_uploads.py -TotalCount 420
+
+
+Ran Get-Content frontend\src\lib\supabase.ts -TotalCount 220
+
+
+Saya lagi menahan refactor schema supaya tidak mematahkan banyak call site sekaligus. Strateginya: kolom Postgres saya buat native dulu, tapi saya tetap kasih helper normalisasi supaya router/worker lama yang sebelumnya mengira JSON adalah string bisa tetap jalan sambil kita rapikan satu per satu.
+
+Ran Get-ChildItem -Recurse backend -Include *.py | Select-String -Pattern 'oauth_token_json|input_json|result_json|_platform_statuses|_target_platforms|_account_map|_options|_job_tags|prompts_json' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }
+
+
+Ran Get-ChildItem -Recurse frontend\src -Include *.ts,*.tsx | Select-String -Pattern '/generation/(image|video|tasks)|task_id|task.status|GenerationCreateResponse|list_generation_tasks' | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }
+
+
+Saya mulai edit fondasi sekarang. Saya akan menambah tipe Postgres-native, model event realtime, dan helper JSON/event agar perubahan berikutnya di router/worker bisa lebih aman dan konsisten.
+
+Created
+json_utils.py
++41
+-0
+Created
+realtime.py
++34
+-0
+Created
+sqltypes.py
++8
+-0
+Created
+realtime_event.py
++22
+-0
+Reconnecting... 2/5
+Reconnecting... 3/5
+Fondasi helper sudah masuk. Berikutnya saya pindahkan model utama ke tipe Postgres-compatible dan menyesuaikan bootstrapping database supaya Supabase/Postgres jadi jalur utama tanpa mematahkan import model yang sudah ada.
+
+Edited
+database.py
++8
+-17
+Edited
+__init__.py
++6
+-5
+Edited
+account.py
++5
+-4
+Edited
+asset_metadata.py
++3
+-2
+Edited
+generation_task.py
++24
+-23
+Edited
+project_config.py
++7
+-10
+Edited
+upload_queue.py
++23
+-38
+Model-layer sudah digeser ke arah Postgres native dan outbox realtime sudah tersedia. Sekarang saya rapikan startup migration supaya tidak lagi bergantung pada raw SQLite ALTER hack, lalu saya sambungkan event publishing ke write path backend.
+
+Created
+migrations.py
++232
+-0
+Ran Get-Content backend\routers\publisher_queue.py | Select-Object -Skip 240 -First 460
+
+
+Ran Get-Content backend\routers\drive.py -TotalCount 280
+
+
+Ran Get-Content backend\routers\accounts.py | Select-Object -Skip 220 -First 340
+
+
+Edited
+accounts.py
++37
+-12
+Edited
+drive.py
++34
+-27
+Edited
+generation.py
++27
+-18
+Edited
+generation_service.py
++69
+-35
+Edited
+playwright_login.py
++32
+-23
+Edited
+publisher_queue.py
++19
+-0
+Edited
+publisher_uploads.py
++25
+-6
+Backend write path utama sudah mulai mem-publish event untuk accounts, upload_queue, dan generation_tasks. Saya lanjutkan dengan endpoint observability/replay dan helper frontend subscription supaya UI bisa mulai menerima update incremental tanpa menghapus snapshot API lama.
+
+Edited
+main.py
++6
+-4
+Created
+realtime.py
++51
+-0
+Edited
+page.tsx
++27
+-2
+Edited
+page.tsx
++25
+-1
+Edited
+supabase.ts
++46
+-3
+Saya sudah sambungkan backend event stream dan consumer awal di frontend untuk accounts serta publisher queue. Sekarang saya jalankan verifikasi cepat untuk menangkap error sintaks/import dulu, lalu saya rapikan titik yang masih belum lolos.
+
+Ran python -m compileall backend
+
+
+Ran npm run build
+
+
+Worked for 11m 22s
+Build sudah jalan cukup jauh; yang muncul sekarang error tipikal integrasi: satu indentation issue di backend dan satu cast TypeScript di frontend realtime handler. Saya perbaiki dua ini dulu, lalu rerun verifikasi supaya kita lihat error berikutnya yang benar-benar substantif.
+
+Ran $lines = Get-Content frontend\src\app\accounts\page.tsx; for ($i=532; $i -le 552; $i++) { if ($i -le $lines.Length) { '{0,4}: {1}' -f $i, $lines[$i-1] } }
+
+
+Ran $lines = Get-Content backend\routers\publisher_uploads.py; for ($i=450; $i -le 490; $i++) { if ($i -le $lines.Length) { '{0,4}: {1}' -f $i, $lines[$i-1] } }
+
+
+Edited
+publisher_uploads.py
++1
+-1
+Edited
+page.tsx
++1
+-1
+You've hit your usage limit. To get more access now, send a request to your admin or try again at 11:37 AM.
+24 files changed
++735
+-461
+Undo
+backend/core/database.py
+"""
+Database configuration - SQLAlchemy engine, session factory, and dependency injection.
+
+Uses SQLite by default (file: nomad_hub.db at the project root).
+Override DATABASE_URL in .env to use PostgreSQL for production:
+  DATABASE_URL=postgresql://user:password@host:5432/nomad_hub
+Supabase/PostgreSQL is the canonical target for production.
+SQLite fallback remains only for local compatibility when DATABASE_URL is not set.
+"""
+import os
+from sqlalchemy import create_engine, event
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import sessionmaker
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Engine options
+connect_args = {}
+engine_kwargs = {"echo": False}
+engine_kwargs = {"echo": False, "future": True}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+else:
+    connect_args = {"prepare_threshold": None}
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_size"] = int(os.environ.get("DATABASE_POOL_SIZE", "10"))
+    engine_kwargs["max_overflow"] = int(os.environ.get("DATABASE_MAX_OVERFLOW", "20"))
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+    **engine_kwargs,
+)
+
+# Enable WAL mode + foreign keys for SQLite automatically
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragmas(dbapi_conn, _):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def create_all_tables():
+    """Create all tables (safe to call on every startup)."""
+    from backend.models import account, upload_queue, project_config, asset_metadata  # noqa: F401
+    from backend.models import account, upload_queue, project_config, asset_metadata, generation_task, realtime_event  # noqa: F401
+    Base.metadata.create_all(bind=engine)
+backend/core/json_utils.py
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def ensure_json_dict(value: Any) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def ensure_json_list(value: Any) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def ensure_json_value(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    return value
+backend/core/migrations.py
+"""
+Auto-migration seeder: Imports existing JSON flat-files into SQLite on first startup.
+Run automatically by main.py on application start.
+Postgres/Supabase-friendly migration bootstrap.
+
+This module performs two lightweight startup tasks:
+- one-time imports from legacy JSON flat files
+- one-time imports from a legacy SQLite file when present
+
+The routines are idempotent and skip tables that already contain data.
+"""
+import os
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+from datetime import datetime
+from pathlib import Path
+from sqlalchemy import inspect, text
+from typing import Any
+
+from backend.core.logger import logger
+from backend.core.database import engine
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ACCOUNTS_JSON = BASE_DIR / "data" / "accounts.json"
+STATUS_JSON = BASE_DIR / "upload_queue" / "status.json"
+IS_SQLITE = engine.dialect.name == "sqlite"
+LEGACY_SQLITE_DB = BASE_DIR / "nomad_hub.db"
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def seed_accounts_from_json(db):
+    """Import data/accounts.json into the accounts table if the table is empty."""
+    from backend.models.account import Account
+    if db.query(Account).count() > 0:
+        return  # Already seeded
+
+    if not ACCOUNTS_JSON.exists():
+    if db.query(Account).count() > 0 or not ACCOUNTS_JSON.exists():
+        return
+
+    try:
+            accounts = json.load(f)
+
+        for acc in accounts:
+            account = Account(
+            db.add(Account(
+                id=acc.get("id") or f"{acc.get('platform', 'unknown')}_{uuid.uuid4().hex[:8]}",
+                name=acc.get("name", "Unnamed"),
+                platform=acc.get("platform", ""),
+                status=acc.get("status", "needs_login"),
+                api_key=acc.get("api_key"),
+                api_secret=acc.get("api_secret"),
+                last_login=datetime.fromisoformat(acc["last_login"]) if acc.get("last_login") else None,
+            )
+            db.add(account)
+                oauth_token_json=acc.get("oauth_token_json"),
+                channel_title=acc.get("channel_title"),
+                tags=acc.get("tags"),
+                notes=acc.get("notes"),
+                browser_type=acc.get("browser_type") or "chromium",
+                proxy=acc.get("proxy"),
+                user_agent=acc.get("user_agent"),
+                lightweight_mode=bool(acc.get("lightweight_mode", False)),
+                last_login=_parse_dt(acc.get("last_login")),
+            ))
+
+        db.commit()
+        count = len(accounts)
+        logger.info(f"[Migration] Seeded {count} account(s) from accounts.json → SQLite")
+        logger.info(f"[Migration] Seeded {len(accounts)} account(s) from accounts.json")
+    except Exception as e:
+        logger.error(f"[Migration] Failed to seed accounts: {e}")
+        logger.error(f"[Migration] Failed to seed accounts from JSON: {e}")
+        db.rollback()
+
+
+def seed_upload_queue_from_json(db):
+    """Import upload_queue/status.json into the upload_queue table if it is empty."""
+    from backend.models.upload_queue import UploadQueueItem
+    if db.query(UploadQueueItem).count() > 0:
+        return  # Already seeded
+
+    if not STATUS_JSON.exists():
+    if db.query(UploadQueueItem).count() > 0 or not STATUS_JSON.exists():
+        return
+
+    try:
+                title=meta.get("title"),
+                description=meta.get("description"),
+                tags=meta.get("tags"),
+                uploaded_at=_parse_dt(data.get("uploaded_at")),
+                scheduled_at=_parse_dt(data.get("scheduled_at")),
+            )
+            item.platforms = data.get("platforms", {})
+            db.add(item)
+
+        db.commit()
+        count = len(status_data)
+        logger.info(f"[Migration] Seeded {count} queue item(s) from status.json → SQLite")
+        logger.info(f"[Migration] Seeded {len(status_data)} queue item(s) from status.json")
+    except Exception as e:
+        logger.error(f"[Migration] Failed to seed upload queue: {e}")
+        logger.error(f"[Migration] Failed to seed upload queue from JSON: {e}")
+        db.rollback()
+
+
+def alter_accounts_add_youtube_cols():
+    """Add oauth_token_json / channel_title to accounts if not present.
+    Uses the raw SQLite engine directly — safe to call before any ORM query.
+    """
+    if not IS_SQLITE:
+def seed_from_legacy_sqlite(db):
+    if not LEGACY_SQLITE_DB.exists():
+        return
+    try:
+        with engine.connect() as conn:
+            raw = conn.connection  # raw sqlite3 Connection
+            cursor = raw.cursor()
+            existing = {row[1] for row in cursor.execute("PRAGMA table_info(accounts)")}
+            added = []
+            if "oauth_token_json" not in existing:
+                cursor.execute("ALTER TABLE accounts ADD COLUMN oauth_token_json TEXT")
+                added.append("oauth_token_json")
+            if "channel_title" not in existing:
+                cursor.execute("ALTER TABLE accounts ADD COLUMN channel_title VARCHAR")
+                added.append("channel_title")
+            if added:
+                raw.commit()
+                logger.info(f"[Migration] Added accounts columns: {added}")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add YouTube columns: {e}")
+
+def remove_accounts_donut_cols():
+    if not IS_SQLITE:
+        return
+    try:
+        with engine.connect() as conn:
+            raw = conn.connection
+            cursor = raw.cursor()
+            existing = {row[1] for row in cursor.execute("PRAGMA table_info(accounts)")}
+            if "donut_profile_id" not in existing and "donut_api_token" not in existing:
+                return
+
+            cursor.execute("""
+                CREATE TABLE accounts_new (
+                    id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    platform VARCHAR NOT NULL,
+                    auth_method VARCHAR NOT NULL,
+                    status VARCHAR,
+                    api_key VARCHAR,
+                    api_secret VARCHAR,
+                    oauth_token_json TEXT,
+                    channel_title VARCHAR,
+                    last_login DATETIME,
+                    created_at DATETIME,
+                    tags VARCHAR,
+                    notes TEXT,
+                    browser_type VARCHAR,
+                    proxy VARCHAR,
+                    user_agent VARCHAR,
+                    lightweight_mode BOOLEAN
+                )
+            """)
+
+            cursor.execute("""
+                INSERT INTO accounts_new (
+                    id,
+                    name,
+                    platform,
+                    auth_method,
+                    status,
+                    api_key,
+                    api_secret,
+                    oauth_token_json,
+                    channel_title,
+                    last_login,
+                    created_at,
+                    tags,
+                    notes,
+                    browser_type,
+                    proxy,
+                    user_agent,
+                    lightweight_mode
+                )
+                SELECT
+                    id,
+                    name,
+                    platform,
+                    auth_method,
+                    status,
+                    api_key,
+                    api_secret,
+                    oauth_token_json,
+                    channel_title,
+                    last_login,
+                    created_at,
+                    tags,
+                    notes,
+                    browser_type,
+                    proxy,
+                    user_agent,
+                    lightweight_mode
+                FROM accounts
+            """)
+
+            cursor.execute("DROP TABLE accounts")
+            cursor.execute("ALTER TABLE accounts_new RENAME TO accounts")
+            raw.commit()
+            logger.info("[Migration] Removed Donut columns from accounts")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not remove Donut columns: {e}")
+        from backend.models.account import Account
+        from backend.models.asset_metadata import AssetMetadata
+        from backend.models.generation_task import GenerationTask
+        from backend.models.project_config import ProjectConfig
+        from backend.models.upload_queue import UploadQueueItem
+
+def alter_upload_queue_add_paths():
+    """Add file_path and project_dir to upload_queue table if not present."""
+    if not IS_SQLITE:
+        return
+    try:
+        with engine.connect() as conn:
+            raw = conn.connection
+            cursor = raw.cursor()
+            existing = {row[1] for row in cursor.execute("PRAGMA table_info(upload_queue)")}
+            added = []
+            if "file_path" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN file_path VARCHAR")
+                added.append("file_path")
+            if "project_dir" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN project_dir VARCHAR")
+                added.append("project_dir")
+            if added:
+                raw.commit()
+                logger.info(f"[Migration] Added upload_queue columns: {added}")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add path columns to upload_queue: {e}")
+        conn = sqlite3.connect(str(LEGACY_SQLITE_DB))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+def alter_upload_queue_add_config():
+    """Add config columns to upload_queue if not present."""
+    if not IS_SQLITE:
+        return
+    try:
+        with engine.connect() as conn:
+            raw = conn.connection
+            cursor = raw.cursor()
+            existing = {row[1] for row in cursor.execute("PRAGMA table_info(upload_queue)")}
+            added = []
+            if "target_platforms" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN target_platforms TEXT")
+                added.append("target_platforms")
+            if "account_map" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN account_map TEXT")
+                added.append("account_map")
+            if "options" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN options TEXT")
+                added.append("options")
+            if "scheduled_at" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN scheduled_at DATETIME")
+                added.append("scheduled_at")
+            if "worker_state" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN worker_state VARCHAR")
+                added.append("worker_state")
+            if "job_tags" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN job_tags TEXT")
+                added.append("job_tags")
+            if "attempt_count" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN attempt_count INTEGER DEFAULT 0")
+                added.append("attempt_count")
+            if "last_error" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN last_error TEXT")
+                added.append("last_error")
+            if "last_run_at" not in existing:
+                cursor.execute("ALTER TABLE upload_queue ADD COLUMN last_run_at DATETIME")
+                added.append("last_run_at")
+            if added:
+                raw.commit()
+                logger.info(f"[Migration] Added upload_queue config columns: {added}")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add config columns to upload_queue: {e}")
+        table_specs = [
+            ("accounts", Account, lambda row: Account(
+                id=row["id"],
+                name=row["name"],
+                platform=row["platform"],
+                auth_method=row["auth_method"],
+                status=row["status"],
+                api_key=row["api_key"],
+                api_secret=row["api_secret"],
+                oauth_token_json=json.loads(row["oauth_token_json"]) if row["oauth_token_json"] else None,
+                channel_title=row["channel_title"],
+                last_login=_parse_dt(row["last_login"]),
+                tags=row["tags"],
+                notes=row["notes"],
+                browser_type=row["browser_type"] or "chromium",
+                proxy=row["proxy"],
+                user_agent=row["user_agent"],
+                lightweight_mode=bool(row["lightweight_mode"]) if row["lightweight_mode"] is not None else False,
+            )),
+            ("generation_tasks", GenerationTask, lambda row: GenerationTask(
+                id=row["id"],
+                task_type=row["task_type"],
+                provider=row["provider"],
+                status=row["status"],
+                prompt=row["prompt"],
+                input_json=json.loads(row["input_json"] or "{}"),
+                provider_task_id=row["provider_task_id"],
+                result_url=row["result_url"],
+                result_json=json.loads(row["result_json"]) if row["result_json"] else None,
+                error=row["error"],
+                poll_count=row["poll_count"] or 0,
+                created_at=_parse_dt(row["created_at"]),
+                started_at=_parse_dt(row["started_at"]),
+                finished_at=_parse_dt(row["finished_at"]),
+                updated_at=_parse_dt(row["updated_at"]),
+            )),
+            ("upload_queue", UploadQueueItem, lambda row: UploadQueueItem(
+                filename=row["filename"],
+                status=row["status"],
+                title=row["title"],
+                description=row["description"],
+                tags=row["tags"],
+                scheduled_at=_parse_dt(row["scheduled_at"]),
+                uploaded_at=_parse_dt(row["uploaded_at"]),
+                created_at=_parse_dt(row["created_at"]),
+                worker_state=row["worker_state"],
+                attempt_count=row["attempt_count"] or 0,
+                last_error=row["last_error"],
+                last_run_at=_parse_dt(row["last_run_at"]),
+                file_path=row["file_path"],
+                project_dir=row["project_dir"],
+            )),
+            ("project_configs", ProjectConfig, lambda row: ProjectConfig(
+                id=row["id"],
+                name=row["name"],
+                project_type=row["project_type"],
+                topic=row["topic"] or "",
+                character=row["character"] or "",
+                number_n=row["number_n"] or 10,
+                system_prompt=row["system_prompt"] or "",
+                prefix=row["prefix"] or "",
+                suffix=row["suffix"] or "",
+                grok_account_id=row["grok_account_id"] or "",
+                whisk_account_id=row["whisk_account_id"] or "",
+                created_at=_parse_dt(row["created_at"]),
+                updated_at=_parse_dt(row["updated_at"]),
+                _prompts_json=json.loads(row["prompts_json"] or "[]"),
+            )),
+            ("asset_metadata", AssetMetadata, lambda row: AssetMetadata(
+                id=row["id"],
+                project_type=row["project_type"],
+                project_name=row["project_name"],
+                canonical_dir=row["canonical_dir"],
+                filename=row["filename"],
+                title=row["title"] or "",
+                description=row["description"] or "",
+                tags=row["tags"] or "",
+                updated_at=_parse_dt(row["updated_at"]),
+            )),
+        ]
+
+def alter_project_configs_add_number_n():
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            tables = set(inspector.get_table_names())
+            if "project_configs" not in tables:
+                return
+            existing = {c["name"] for c in inspector.get_columns("project_configs")}
+            if "number_n" in existing:
+                return
+            conn.execute(text("ALTER TABLE project_configs ADD COLUMN number_n INTEGER DEFAULT 10"))
+            conn.commit()
+            logger.info("[Migration] Added project_configs column: number_n")
+        for table_name, model, row_factory in table_specs:
+            if db.query(model).count() > 0:
+                continue
+            try:
+                rows = cur.execute(f"SELECT * FROM {table_name}").fetchall()
+            except sqlite3.Error:
+                continue
+            if not rows:
+                continue
+            for row in rows:
+                obj = row_factory(row)
+                if isinstance(obj, UploadQueueItem):
+                    obj.platforms = json.loads(row["platform_statuses"] or "{}")
+                    obj.target_platforms = json.loads(row["target_platforms"] or "[]")
+                    obj.account_map = json.loads(row["account_map"] or "{}")
+                    obj.options = json.loads(row["options"] or "{}")
+                    obj.job_tags = json.loads(row["job_tags"] or "[]")
+                db.add(obj)
+            db.commit()
+            logger.info(f"[Migration] Imported {len(rows)} row(s) from legacy SQLite table {table_name}")
+        conn.close()
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add number_n to project_configs: {e}")
+        logger.warning(f"[Migration] Legacy SQLite import skipped: {e}")
+        db.rollback()
+
+
+def alter_project_configs_add_accounts():
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            tables = set(inspector.get_table_names())
+            if "project_configs" not in tables:
+                return
+            existing = {c["name"] for c in inspector.get_columns("project_configs")}
+            statements = []
+            if "grok_account_id" not in existing:
+                statements.append("ALTER TABLE project_configs ADD COLUMN grok_account_id VARCHAR DEFAULT ''")
+            if "whisk_account_id" not in existing:
+                statements.append("ALTER TABLE project_configs ADD COLUMN whisk_account_id VARCHAR DEFAULT ''")
+            for stmt in statements:
+                conn.execute(text(stmt))
+            if statements:
+                conn.commit()
+                logger.info("[Migration] Added project_configs columns: grok_account_id, whisk_account_id")
+    except Exception as e:
+        logger.warning(f"[Migration] Could not add grok/whisk accounts to project_configs: {e}")
+
+def run_migrations(db):
+    """Run all migrations. Called once on startup."""
+    # Column migrations MUST run before any ORM queries on the models
+    alter_accounts_add_youtube_cols()
+    remove_accounts_donut_cols()
+    alter_upload_queue_add_paths()
+    alter_upload_queue_add_config()
+    alter_project_configs_add_number_n()
+    alter_project_configs_add_accounts()
+    seed_from_legacy_sqlite(db)
+    seed_accounts_from_json(db)
+    seed_upload_queue_from_json(db)
+    logger.info("[Migration] Migration check complete.")
+backend/core/realtime.py
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from backend.models.realtime_event import RealtimeEvent
+
+
+def _to_iso(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def publish_realtime_event(
+    db: Session,
+    *,
+    stream: str,
+    event_type: str,
+    entity_table: str,
+    entity_id: str,
+    payload: dict[str, Any],
+) -> RealtimeEvent:
+    event = RealtimeEvent(
+        stream=stream,
+        event_type=event_type,
+        entity_table=entity_table,
+        entity_id=str(entity_id),
+        payload={k: _to_iso(v) for k, v in (payload or {}).items()},
+    )
+    db.add(event)
+    return event
+backend/core/sqltypes.py
+from __future__ import annotations
+
+from sqlalchemy import JSON, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
+
+
+JSON_VALUE = JSON().with_variant(JSONB, "postgresql")
+UTC_DATETIME = DateTime(timezone=True)
+backend/main.py
+backend/models/__init__.py
+backend/models/account.py
+backend/models/asset_metadata.py
+backend/models/generation_task.py
+backend/models/project_config.py
+backend/models/realtime_event.py
+backend/models/upload_queue.py
+backend/routers/accounts.py
+backend/routers/drive.py
+backend/routers/generation.py
+backend/routers/publisher_queue.py
+backend/routers/publisher_uploads.py
+backend/routers/realtime.py
+backend/services/generation_service.py
+"""Generation service for image/video tasks with DB-backed polling state."""
+from __future__ import annotations
+
+import json
+import json
+import os
+import time
+import uuid
+
+import requests
+
+from backend.core.database import SessionLocal
+from backend.core.logger import logger
+from backend.models.generation_task import GenerationTask
+from backend.core.database import SessionLocal
+from backend.core.json_utils import ensure_json_value
+from backend.core.logger import logger
+from backend.core.realtime import publish_realtime_event
+from backend.models.generation_task import GenerationTask
+
+
+REPLICATE_API_BASE = "https://api.replicate.com/v1"
+    return None
+
+
+def create_generation_task(db, task_type: str, provider: str, prompt: str, input_payload: Dict[str, Any]) -> GenerationTask:
+    task = GenerationTask(
+        id=f"gen_{uuid.uuid4().hex[:12]}",
+        task_type=task_type,
+        provider=provider,
+        status="queued",
+        prompt=prompt,
+        input_json=json.dumps(input_payload or {}),
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+def create_generation_task(db, task_type: str, provider: str, prompt: str, input_payload: Dict[str, Any]) -> GenerationTask:
+    task = GenerationTask(
+        id=f"gen_{uuid.uuid4().hex[:12]}",
+        task_type=task_type,
+        provider=provider,
+        status="queued",
+        prompt=prompt,
+        input_json=input_payload or {},
+    )
+    db.add(task)
+    publish_realtime_event(
+        db,
+        stream="generation_tasks",
+        event_type="created",
+        entity_table="generation_tasks",
+        entity_id=task.id,
+        payload={"id": task.id, "task_type": task.task_type, "status": task.status, "provider": task.provider},
+    )
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def _run_replicate_prediction(task: GenerationTask, api_token: str, model_version: str, input_payload: Dict[str, Any], timeout_seconds: int = 300) -> Dict[str, Any]:
+        if task.status == "canceled":
+            return
+
+        task.status = "running"
+        task.started_at = _now()
+        db.commit()
+
+        input_payload = json.loads(task.input_json or "{}")
+        task.status = "running"
+        task.started_at = _now()
+        publish_realtime_event(
+            db,
+            stream="generation_tasks",
+            event_type="updated",
+            entity_table="generation_tasks",
+            entity_id=task.id,
+            payload={"id": task.id, "status": task.status, "started_at": task.started_at},
+        )
+        db.commit()
+
+        input_payload = ensure_json_value(task.input_json) or {}
+        if task.provider != "replicate":
+            raise RuntimeError(f"Unsupported provider: {task.provider}")
+
+        prediction = result["prediction"]
+        task.provider_task_id = prediction.get("id")
+        task.poll_count = int(result.get("poll_count") or 0)
+        task.result_json = json.dumps(prediction)
+        task.result_url = _extract_result_url(prediction.get("output"))
+        task.status = prediction.get("status") or "succeeded"
+        if task.status != "succeeded":
+            task.error = prediction.get("error") or "Generation failed"
+        task.result_json = prediction
+        task.result_url = _extract_result_url(prediction.get("output"))
+        task.status = prediction.get("status") or "succeeded"
+        if task.status != "succeeded":
+            task.error = prediction.get("error") or "Generation failed"
+
+        task.finished_at = _now()
+        publish_realtime_event(
+            db,
+            stream="generation_tasks",
+            event_type="updated",
+            entity_table="generation_tasks",
+            entity_id=task.id,
+            payload={"id": task.id, "status": task.status, "result_url": task.result_url, "error": task.error},
+        )
+        db.commit()
+
+        task.finished_at = _now()
+        db.commit()
+
+    except Exception as exc:
+        logger.exception(f"[Generation] Task failed {task_id}: {exc}")
+        task = db.query(GenerationTask).filter(GenerationTask.id == task_id).first()
+        if task:
+            task.status = "failed"
+            task.error = str(exc)
+            task.finished_at = _now()
+            db.commit()
+        if task:
+            task.status = "failed"
+            task.error = str(exc)
+            task.finished_at = _now()
+            publish_realtime_event(
+                db,
+                stream="generation_tasks",
+                event_type="updated",
+                entity_table="generation_tasks",
+                entity_id=task.id,
+                payload={"id": task.id, "status": task.status, "error": task.error},
+            )
+            db.commit()
+    finally:
+        db.close()
+backend/services/playwright_login.py
+                json.dump(raw_cookies, f, indent=2)
+
+            # Update account status in the SQLite database
+            try:
+                # Need to add backend to sys.path so we can import from backend
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if project_root not in sys.path:
+                    sys.path.append(project_root)
+                    
+                from backend.core.database import SessionLocal
+                from backend.models.account import Account
+                
+                db = SessionLocal()
+                try:
+                    db_acc = db.query(Account).filter(Account.id == account_id).first()
+                    if db_acc:
+                        db_acc.status = "active"
+                        db_acc.last_login = datetime.now()
+                        db.commit()
+                        log("✅ Account status → active in database")
+                    else:
+                        log(f"⚠️ Account {account_id} not found in database")
+                finally:
+                    db.close()
+            except Exception as e:
+                log(f"⚠️  Could not update SQLite database: {e}")
+            try:
+                # Need to add backend to sys.path so we can import from backend
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if project_root not in sys.path:
+                    sys.path.append(project_root)
+                    
+                from backend.core.database import SessionLocal
+                from backend.core.realtime import publish_realtime_event
+                from backend.models.account import Account
+                
+                db = SessionLocal()
+                try:
+                    db_acc = db.query(Account).filter(Account.id == account_id).first()
+                    if db_acc:
+                        db_acc.status = "active"
+                        db_acc.last_login = datetime.now()
+                        publish_realtime_event(
+                            db,
+                            stream="accounts",
+                            event_type="status_changed",
+                            entity_table="accounts",
+                            entity_id=db_acc.id,
+                            payload=db_acc.to_dict(mask_secret=True),
+                        )
+                        db.commit()
+                        log("✅ Account status → active in database")
+                    else:
+                        log(f"⚠️ Account {account_id} not found in database")
+                finally:
+                    db.close()
+            except Exception as e:
+                log(f"⚠️  Could not update database account status: {e}")
+        else:
+            log("⏰ TIMEOUT: No login detected within 5 minutes. No cookies saved.")
+            log("   Tip: After logging in, wait a moment for the page to redirect.")
+frontend/src/app/accounts/page.tsx
+import { Textarea } from "@/components/ui/textarea";
+import { ViewToggle } from "@/components/atoms/ViewToggle";
+import { Download, Upload } from "lucide-react";
+import { subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
+
+// ─── YouTube Connect Modal ────────────────────────────────────────
+function YouTubeConnectModal({ account, onConnected }: { account: Account; onConnected: () => void }) {
+        });
+    }, [accounts, search, platformFilter]);
+
+    useEffect(() => { 
+        loadAccounts(); 
+    useEffect(() => {
+        loadAccounts();
+        loadYoutubeSecrets();
+        try {
+            const saved = typeof window !== "undefined" ? localStorage.getItem("accounts-view-mode") : null;
+        } catch {}
+    }, []);
+
+    useEffect(() => {
+        const subscription = subscribeToRealtimeStream("accounts", (event: RealtimeEventRecord) => {
+            const payload = event.payload as unknown as Account;
+            if (!payload?.id) return;
+
+            setAccounts((prev) => {
+                if (event.event_type === "deleted") {
+                    return prev.filter((item) => item.id !== payload.id);
+                }
+
+                const next = [...prev];
+                const index = next.findIndex((item) => item.id === payload.id);
+                if (index >= 0) {
+                    next[index] = { ...next[index], ...payload };
+                } else {
+                    next.unshift(payload);
+                }
+                return next;
+            });
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const loadYoutubeSecrets = async () => {
+        try {
+            const data = await accountsApi.getYoutubeSecrets();
+frontend/src/app/publisher/page.tsx
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { supabase, subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
+
+import { getApiBase } from "@/lib/api";
+const STATIC_BASE = () => `${getApiBase()}/upload_queue_static/`;
+        };
+        ensureAuthAndLoad();
+    }, [router]);
+
+    useEffect(() => {
+        const subscription = subscribeToRealtimeStream("upload_queue", (event: RealtimeEventRecord) => {
+            const payload = event.payload as QueueItem;
+            if (!payload?.filename) return;
+
+            setQueue((prev) => {
+                if (event.event_type === "deleted") {
+                    return prev.filter((item) => item.filename !== payload.filename);
+                }
+
+                const next = [...prev];
+                const index = next.findIndex((item) => item.filename === payload.filename);
+                if (index >= 0) {
+                    next[index] = { ...next[index], ...payload };
+                } else {
+                    next.unshift(payload);
+                }
+                return next;
+            });
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        setSelectedFiles((prev) => {
+frontend/src/lib/supabase.ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const realtimeSchema = process.env.NEXT_PUBLIC_SUPABASE_REALTIME_SCHEMA || "public";
+
+function createOptionalSupabaseClient(): SupabaseClient {
+  if (isSupabaseConfigured && supabaseUrl && supabaseAnonKey) {
+  } as unknown as SupabaseClient;
+}
+
+export const supabase = createOptionalSupabaseClient();
+export const supabase = createOptionalSupabaseClient();
+
+export type RealtimeEventRecord = {
+  id: number;
+  stream: string;
+  event_type: string;
+  entity_table: string;
+  entity_id: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export function subscribeToRealtimeStream(
+  stream: string,
+  onEvent: (event: RealtimeEventRecord) => void
+) {
+  if (!isSupabaseConfigured) {
+    return { unsubscribe: () => undefined };
+  }
+
+  const channel = supabase
+    .channel(`realtime-events:${stream}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: realtimeSchema,
+        table: "realtime_events",
+        filter: `stream=eq.${stream}`,
+      },
+      (payload) => {
+        const row = payload.new as RealtimeEventRecord;
+        onEvent(row);
+      }
+    )
+    .subscribe();
+
+  return {
+    unsubscribe: () => {
+      void supabase.removeChannel(channel);
+    },
+  };
+}

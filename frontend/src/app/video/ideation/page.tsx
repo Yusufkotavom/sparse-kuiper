@@ -1,0 +1,470 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { videoApi, settingsApi, PromptTemplate, ProjectConfig, accountsApi, Account } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wand2, Loader2, Eye, EyeOff, Copy, CheckCheck, FileText } from "lucide-react";
+
+const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed visual prompts for AI video generation (like Grok or Sora). Generate exactly {N} unique, non-repeating prompts for a video sequence featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Describe camera movement, lighting, subject action, and environment clearly.`;
+const DEFAULT_PREFIX = "cinematic video, 4k resolution, highly detailed,";
+const DEFAULT_SUFFIX = "photorealistic, dynamic lighting, masterpiece";
+
+
+export default function IdeationPage() {
+    const router = useRouter();
+    const LAST_PROJECT_STORAGE_KEY = "last_ideation_project_video";
+    const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+    const [prefix, setPrefix] = useState(DEFAULT_PREFIX);
+    const [suffix, setSuffix] = useState(DEFAULT_SUFFIX);
+    const [topic, setTopic] = useState("epic journey in space");
+    const [numberN, setNumberN] = useState(10);
+    const [character, setCharacter] = useState("astronaut explorer");
+    const [prompts, setPrompts] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [projectName, setProjectName] = useState("");
+    const [projects, setProjects] = useState<string[]>([]);
+    const [selectedProject, setSelectedProject] = useState<string | null>(null);
+    const [savedTemplates, setSavedTemplates] = useState<PromptTemplate[]>([]);
+    const [grokAccounts, setGrokAccounts] = useState<Account[]>([]);
+    const [grokAccountId, setGrokAccountId] = useState("grok_default");
+
+    useEffect(() => {
+        loadProjects();
+        loadTemplates();
+        loadGrokAccounts();
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const lastProject = window.localStorage.getItem(LAST_PROJECT_STORAGE_KEY);
+        if (!lastProject) return;
+        void handleProjectSelect(lastProject);
+    }, []);
+
+    const loadTemplates = async () => {
+        try {
+            const list = await settingsApi.listTemplates();
+            setSavedTemplates(list);
+        } catch (e) {
+            console.error("Failed to load templates", e);
+        }
+    };
+
+    const handleLoadTemplate = (templateName: string) => {
+        const t = savedTemplates.find((s) => s.name === templateName);
+        if (!t) return;
+        setSystemPrompt(t.system_prompt);
+        setPrefix(t.prefix);
+        setSuffix(t.suffix);
+        setShowAdvanced(true);
+    };
+
+    const loadProjects = async () => {
+        try {
+            const list = await videoApi.listProjects();
+            setProjects(list);
+        } catch (e) {
+            console.error("Failed to load projects", e);
+        }
+    };
+
+    const loadGrokAccounts = async () => {
+        try {
+            const data = await accountsApi.getAccounts();
+            const items = (data.accounts || []).filter((a) => a.platform === "grok" && a.auth_method === "playwright");
+            setGrokAccounts(items);
+            if (items.length > 0) {
+                setGrokAccountId((prev) => prev || items[0].id || "grok_default");
+            }
+        } catch (e) {
+            console.error("Failed to load grok accounts", e);
+        }
+    };
+
+    const handleProjectSelect = async (name: string) => {
+        setSelectedProject(name);
+        setProjectName(name);
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(LAST_PROJECT_STORAGE_KEY, name);
+        }
+        let currentPrefix = prefix;
+        let currentSuffix = suffix;
+
+        // Load saved project config
+        try {
+            const config = await videoApi.loadProjectConfig(name);
+            if (config.topic) setTopic(config.topic);
+            if (config.character) setCharacter(config.character);
+            if (config.number_n) setNumberN(config.number_n);
+            if (config.system_prompt) setSystemPrompt(config.system_prompt);
+            if (config.prefix !== undefined) {
+                setPrefix(config.prefix);
+                currentPrefix = config.prefix;
+            }
+            if (config.suffix !== undefined) {
+                setSuffix(config.suffix);
+                currentSuffix = config.suffix;
+            }
+            if (config.grok_account_id !== undefined) {
+                setGrokAccountId(config.grok_account_id || "grok_default");
+            } else {
+                setGrokAccountId("grok_default");
+            }
+        } catch (e) {
+            console.log("No saved config for project, using defaults");
+            setGrokAccountId("grok_default");
+        }
+
+        // Load saved project prompts
+        try {
+            const result = await videoApi.getPrompts(name);
+            if (result && result.prompts && result.prompts.length > 0) {
+                const loadedPrompts = result.prompts.map((p: string) => {
+                    let text = p.trim();
+                    const pfx = currentPrefix.trim();
+                    const sfx = currentSuffix.trim();
+                    if (pfx && text.startsWith(pfx)) {
+                        text = text.substring(pfx.length).trim();
+                    }
+                    if (sfx && text.endsWith(sfx)) {
+                        text = text.substring(0, text.length - sfx.length).trim();
+                    }
+                    return text;
+                });
+                setPrompts(loadedPrompts);
+            } else {
+                setPrompts([]);
+            }
+        } catch (e) {
+            setPrompts([]);
+        }
+    };
+
+    const handleCreateProject = async () => {
+        if (!projectName.trim()) return;
+        try {
+            await videoApi.createProject(projectName);
+            await loadProjects();
+            await handleProjectSelect(projectName);
+            alert(`Project ${projectName} created successfully!`);
+        } catch (e) {
+            console.error("Failed to create project", e);
+            alert("Error creating project. It might already exist.");
+        }
+    };
+
+    const handleSavePrompts = async () => {
+        if (!selectedProject || prompts.length === 0) return;
+        try {
+            // Compose full prompts with prefix and suffix
+            const composedPrompts = prompts.map(p =>
+                `${prefix.trim()} ${p.trim()} ${suffix.trim()}`.trim()
+            );
+            await videoApi.savePrompts(selectedProject, composedPrompts);
+
+            // Also save project config
+            await videoApi.saveProjectConfig(selectedProject, {
+                topic,
+                character,
+                number_n: numberN,
+                system_prompt: systemPrompt,
+                prefix,
+                suffix,
+                grok_account_id: grokAccountId,
+            });
+
+            alert(`${composedPrompts.length} prompts + project settings saved!`);
+        } catch (e) {
+            console.error("Failed to save", e);
+        }
+    };
+
+    const handleGenerate = async () => {
+        if (!systemPrompt.trim()) return;
+        setIsLoading(true);
+        setError(null);
+        setPrompts([]);
+        try {
+            const result = await videoApi.generatePrompts({
+                system_prompt: systemPrompt,
+                prefix_prompt: prefix,
+                suffix_prompt: suffix,
+                topic,
+                number_n: numberN,
+                character_type: character,
+            });
+            setPrompts(result);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "An unknown error occurred. Is the FastAPI backend running?");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCopy = (text: string, index: number) => {
+        navigator.clipboard.writeText(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
+            <div className="mb-2">
+                <h2 className="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                    <Wand2 className="w-6 h-6 text-primary" /> Video Ideation
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1">Generate AI-powered visual prompts for Grok Video Generation.</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-primary font-semibold">1. Ideation</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">2. Curation</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">3. Processing (Runs)</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="rounded-md border border-border px-2 py-1 text-muted-foreground">4. Publish</span>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-[var(--gap-base)]">
+                {/* --- LEFT PANEL: Configuration --- */}
+                <div className="space-y-[var(--gap-base)]">
+                    <Card className="bg-surface border-border">
+                        <CardHeader className="pb-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-primary" /> Project Configuration
+                            </CardTitle>
+                            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                                <select
+                                    className="bg-background border-border text-xs text-foreground rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20 flex-1 min-w-[120px]"
+                                    onChange={(e) => handleLoadTemplate(e.target.value)}
+                                    value=""
+                                >
+                                    <option value="" disabled>✨ Load Template</option>
+                                    {savedTemplates.filter(t => ["video", "custom"].includes(t.category)).map(t => (
+                                        <option key={t.name} value={t.name}>{t.name}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    className="bg-background border-border text-xs text-foreground rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary/20 flex-1 min-w-[120px]"
+                                    onChange={(e) => handleProjectSelect(e.target.value)}
+                                    value={selectedProject || ""}
+                                >
+                                    <option value="" disabled>📂 Load Project</option>
+                                    {projects.map(p => (
+                                        <option key={p} value={p}>{p}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-5 pt-2">
+                            {/* Create Project Section */}
+                            <div className="p-3 bg-accent/30 rounded-xl border border-border/50 space-y-3">
+                                <Label className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">New Project</Label>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                <Input
+                                    placeholder="Enter project name..."
+                                    value={projectName}
+                                    onChange={(e) => setProjectName(e.target.value)}
+                                    className="h-9 bg-background border-border text-sm flex-1"
+                                />
+                                <Button onClick={handleCreateProject} disabled={!projectName.trim()} className="h-9 bg-primary text-primary-foreground font-bold px-4 w-full sm:w-auto">
+                                    Create
+                                </Button>
+                            </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Topic / Subject</Label>
+                                    <Input
+                                        value={topic}
+                                        onChange={(e) => setTopic(e.target.value)}
+                                        className="bg-background border-border h-9"
+                                        placeholder="e.g. Cyberpunk Samurai"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Character / Style</Label>
+                                    <Input
+                                        value={character}
+                                        onChange={(e) => setCharacter(e.target.value)}
+                                        className="bg-background border-border h-9"
+                                        placeholder="e.g. Cinematic, 8k"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Number of Prompts</Label>
+                                    <Input
+                                        type="number"
+                                        value={numberN}
+                                        onChange={(e) => setNumberN(parseInt(e.target.value) || 1)}
+                                        className="bg-background border-border h-9"
+                                    />
+                                </div>
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Grok Account</Label>
+                                    <select
+                                        value={grokAccountId}
+                                        onChange={(e) => setGrokAccountId(e.target.value)}
+                                        className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+                                    >
+                                        {grokAccounts.length === 0 ? (
+                                            <option value="grok_default">grok_default</option>
+                                        ) : (
+                                            grokAccounts.map((a) => (
+                                                <option key={a.id} value={a.id}>{a.name} ({a.id})</option>
+                                            ))
+                                        )}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground font-medium">System Prompt (AI Logic)</Label>
+                                <Textarea
+                                    rows={4}
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    className="bg-background border-border text-sm leading-relaxed"
+                                    placeholder="Tell the AI how to behave..."
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Prefix (Always Before)</Label>
+                                    <Input
+                                        value={prefix}
+                                        onChange={(e) => setPrefix(e.target.value)}
+                                        className="bg-background border-border h-9 text-xs"
+                                        placeholder="e.g. A close up of..."
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground font-medium">Suffix (Always After)</Label>
+                                    <Input
+                                        value={suffix}
+                                        onChange={(e) => setSuffix(e.target.value)}
+                                        className="bg-background border-border h-9 text-xs"
+                                        placeholder="e.g. --ar 16:9"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <Button
+                                    onClick={handleGenerate}
+                                    disabled={isLoading || !systemPrompt.trim()}
+                                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-10 font-bold shadow-lg shadow-primary/20"
+                                >
+                                    {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
+                                    Generate Visual Prompts
+                                </Button>
+                                <Button
+                                    onClick={handleSavePrompts}
+                                    disabled={!selectedProject || prompts.length === 0}
+                                    variant="outline"
+                                    className="border-primary/30 text-primary hover:bg-primary/5 h-10 font-bold px-6"
+                                >
+                                    Save to Project
+                                </Button>
+                            </div>
+
+                            {error && (
+                                <div className="p-3 bg-error/10 border border-error/20 rounded-xl text-error text-xs font-medium animate-in slide-in-from-top-2">
+                                    ⚠️ {error}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* --- RIGHT PANEL: Results --- */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2 text-foreground">
+                            <CheckCheck className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-bold uppercase tracking-wider">Generated Results ({prompts.length})</h3>
+                        </div>
+                        {prompts.length > 0 && (
+                            <span className="text-[10px] font-bold text-muted-foreground bg-accent px-2 py-0.5 rounded-full">
+                                {selectedProject ? `Ready to save to ${selectedProject}` : "Create project to save"}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-thin">
+                        {prompts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-[400px] border-2 border-dashed border-border rounded-3xl text-muted-foreground/40 bg-surface/30">
+                                <Wand2 className="w-12 h-12 mb-4 opacity-10" />
+                                <p className="text-sm font-medium italic">Your creative ideas will appear here...</p>
+                                <p className="text-xs mt-1">Configure settings and click Generate</p>
+                            </div>
+                        ) : (
+                            prompts.map((p, i) => (
+                                <Card key={i} className="group relative bg-surface border-border hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 group-hover:bg-primary transition-colors" />
+                                    <CardContent className="p-4">
+                                        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                                            <div className="flex-1 space-y-2 w-full">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">PROMPT #{i + 1}</span>
+                                                </div>
+                                                <p className="text-sm text-foreground leading-relaxed font-medium break-words">{p}</p>
+                                                <div className="flex flex-wrap gap-2 pt-1">
+                                                    <span className="text-[10px] text-muted-foreground bg-accent/50 px-2 py-0.5 rounded border border-border/50">Prefix: {prefix || "none"}</span>
+                                                    <span className="text-[10px] text-muted-foreground bg-accent/50 px-2 py-0.5 rounded border border-border/50">Suffix: {suffix || "none"}</span>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 sm:opacity-0 group-hover:opacity-100 transition-all self-end sm:self-start"
+                                                onClick={() => handleCopy(p, i)}
+                                            >
+                                                {copiedIndex === i ? <CheckCheck className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {selectedProject && (
+                <div className="sticky bottom-3 z-20 rounded-xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-muted-foreground">
+                            Next step untuk <span className="font-semibold text-foreground">{selectedProject}</span>: lanjutkan ke curation atau buka detail project.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/project-manager/${encodeURIComponent(selectedProject)}`)}
+                            >
+                                Buka Project Detail
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => router.push(`/video/curation?project=${encodeURIComponent(selectedProject)}`)}
+                            >
+                                Lanjut ke Curation
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
