@@ -3,5 +3,6 @@ from backend.models.account import Account
 from backend.models.upload_queue import UploadQueueItem
 from backend.models.project_config import ProjectConfig
 from backend.models.asset_metadata import AssetMetadata
+from backend.models.generation_task import GenerationTask
 
-__all__ = ["Account", "UploadQueueItem", "ProjectConfig", "AssetMetadata"]
+__all__ = ["Account", "UploadQueueItem", "ProjectConfig", "AssetMetadata", "GenerationTask"]

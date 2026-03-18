@@ -72,6 +72,7 @@ from backend.routers import looper
 from backend.routers import drive
 from backend.routers import backup
 from backend.routers import internal_playwright
+from backend.routers import generation
 
 app.include_router(kdp.router)
 app.include_router(app_settings.router)
@@ -86,3 +87,4 @@ app.include_router(looper.router)
 app.include_router(drive.router)
 app.include_router(backup.router)
 app.include_router(internal_playwright.router)
+app.include_router(generation.router)
