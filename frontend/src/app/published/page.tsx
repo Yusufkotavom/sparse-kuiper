@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import { publisherApi } from "@/lib/api";
+import { queueBuilderApi } from "@/lib/api";
 import { PageHeader } from "@/components/atoms/PageHeader";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
@@ -40,7 +40,7 @@ function PublishedContent() {
     const load = async () => {
         setLoading(true);
         try {
-            const response = await publisherApi.getPublishedQueue();
+            const response = await queueBuilderApi.getPublishedQueue();
             setItems(response.queue || []);
         } catch (error) {
             console.error("Failed to load published logs", error);
@@ -205,7 +205,7 @@ function PublishedContent() {
                                 ))}
                             </div>
                             <div className="col-span-2 flex justify-end gap-2">
-                                <Link href="/publisher" className={buttonVariants({ variant: "outline", size: "sm", className: "w-full md:w-auto" })}>
+                                <Link href="/queue-builder" className={buttonVariants({ variant: "outline", size: "sm", className: "w-full md:w-auto" })}>
                                     Open Queue Builder
                                 </Link>
                             </div>

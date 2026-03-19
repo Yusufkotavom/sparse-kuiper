@@ -10,12 +10,16 @@ from backend.routers.settings_schemas import (
     TemplatePayload,
     TemplateUpdatePayload,
     LooperPreset,
+    ConcatPreset,
     SystemPromptPayload,
     GroqKeyPayload,
     OpenAIKeyPayload,
     GeminiKeyPayload,
     AzureOpenAIPayload,
+    TelegramSettingsPayload,
+    TelegramTestPayload,
 )
+from backend.services.telegram_notifier import send_telegram_message
 
 from backend.core.logger import logger
 
@@ -24,6 +28,7 @@ router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 VALID_CATEGORIES = ["kdp_coloring", "story", "video", "image_gen", "custom"]
 TEMPLATE_SETTING_TYPE = "prompt_template"
 LOOPER_PRESET_SETTING_TYPE = "looper_preset"
+CONCAT_PRESET_SETTING_TYPE = "concat_preset"
 
 
 def _read_config() -> dict:
@@ -144,6 +149,84 @@ async def delete_looper_preset(name: str, db: Session = Depends(get_db)):
     db.delete(preset)
     db.commit()
     logger.info(f"Deleted looper preset: {name}")
+    return {"status": "success", "message": f"Preset '{name}' deleted."}
+
+
+@router.get("/concat-presets")
+async def list_concat_presets(db: Session = Depends(get_db)):
+    """Returns all video concat presets."""
+    _seed_settings_from_config(db, setting_type=CONCAT_PRESET_SETTING_TYPE, config_key="concat_presets")
+    rows = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == CONCAT_PRESET_SETTING_TYPE)
+        .order_by(AppSetting.name.asc())
+        .all()
+    )
+    return [_setting_to_dict(row) for row in rows]
+
+
+@router.post("/concat-presets")
+async def create_concat_preset(req: ConcatPreset, db: Session = Depends(get_db)):
+    """Creates a new concat preset."""
+    existing = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == CONCAT_PRESET_SETTING_TYPE, AppSetting.name == req.name)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Preset with this name already exists.")
+
+    db.add(AppSetting(
+        setting_type=CONCAT_PRESET_SETTING_TYPE,
+        name=req.name,
+        payload=req.model_dump(exclude={"name"}),
+    ))
+    db.commit()
+    logger.info(f"Created concat preset: {req.name}")
+    return {"status": "success", "message": f"Preset '{req.name}' created."}
+
+
+@router.put("/concat-presets/{name}")
+async def update_concat_preset(name: str, req: ConcatPreset, db: Session = Depends(get_db)):
+    """Updates an existing concat preset."""
+    preset = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == CONCAT_PRESET_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset not found.")
+
+    if req.name != name:
+        rename_conflict = (
+            db.query(AppSetting)
+            .filter(AppSetting.setting_type == CONCAT_PRESET_SETTING_TYPE, AppSetting.name == req.name)
+            .first()
+        )
+        if rename_conflict:
+            raise HTTPException(status_code=400, detail="Preset with the new name already exists.")
+        preset.name = req.name
+
+    preset.payload = req.model_dump(exclude={"name"})
+    db.commit()
+    logger.info(f"Updated concat preset: {req.name}")
+    return {"status": "success", "message": f"Preset '{req.name}' updated."}
+
+
+@router.delete("/concat-presets/{name}")
+async def delete_concat_preset(name: str, db: Session = Depends(get_db)):
+    """Deletes a concat preset."""
+    preset = (
+        db.query(AppSetting)
+        .filter(AppSetting.setting_type == CONCAT_PRESET_SETTING_TYPE, AppSetting.name == name)
+        .first()
+    )
+    if not preset:
+        raise HTTPException(status_code=404, detail="Preset not found.")
+
+    db.delete(preset)
+    db.commit()
+    logger.info(f"Deleted concat preset: {name}")
     return {"status": "success", "message": f"Preset '{name}' deleted."}
 
 
@@ -413,3 +496,52 @@ async def update_azure_openai_settings(req: AzureOpenAIPayload):
     config["azure_openai"] = azure
     _write_config(config)
     return {"status": "success"}
+
+
+@router.get("/telegram")
+async def get_telegram_settings():
+    config = _read_config()
+    telegram = config.get("telegram", {}) if isinstance(config.get("telegram", {}), dict) else {}
+    bot_token = telegram.get("bot_token", "") or settings.telegram_bot_token or ""
+    chat_id = str(telegram.get("chat_id", "") or settings.telegram_chat_id or "")
+    enabled = bool(telegram.get("enabled", settings.telegram_notifications_enabled))
+    masked = ""
+    if bot_token:
+        masked = ("*" * max(0, len(bot_token) - 4)) + bot_token[-4:]
+    return {
+        "enabled": enabled,
+        "has_bot_token": bool(bot_token),
+        "masked_bot_token": masked,
+        "chat_id": chat_id,
+        "has_chat_id": bool(chat_id),
+    }
+
+
+@router.put("/telegram")
+async def update_telegram_settings(req: TelegramSettingsPayload):
+    config = _read_config()
+    telegram = config.get("telegram", {}) if isinstance(config.get("telegram", {}), dict) else {}
+
+    telegram["enabled"] = bool(req.enabled)
+    settings.telegram_notifications_enabled = bool(req.enabled)
+
+    if req.bot_token is not None:
+        telegram["bot_token"] = req.bot_token.strip()
+        settings.telegram_bot_token = req.bot_token.strip()
+
+    if req.chat_id is not None:
+        telegram["chat_id"] = req.chat_id.strip()
+        settings.telegram_chat_id = req.chat_id.strip()
+
+    config["telegram"] = telegram
+    _write_config(config)
+    return {"status": "success"}
+
+
+@router.post("/telegram/test")
+async def test_telegram_settings(req: TelegramTestPayload):
+    message = (req.message or "").strip() or "Telegram test message from sparse-kuiper."
+    ok = send_telegram_message(message)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to send Telegram message. Check enabled state, bot token, and chat ID.")
+    return {"status": "success", "message": "Telegram test message sent."}

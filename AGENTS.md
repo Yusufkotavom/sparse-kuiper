@@ -6,14 +6,34 @@ dikerjakan di windows os
 - `frontend/` contains the Next.js (App Router) UI:
   - `frontend/src/app/` contains route pages (`<route>/page.tsx`)
   - `frontend/src/components/` contains shared UI components (Sidebar, wrappers, atoms, shadcn-style `ui/` primitives)
+  - `frontend/src/components/queue-builder/QueueBuilderPage.tsx` is the current main implementation for the publishing flow UI
   - `frontend/src/lib/api.ts` centralizes all frontend API calls and uses `NEXT_PUBLIC_API_URL`
 - `backend/` contains the FastAPI server:
   - `backend/main.py` registers routers, mounts static dirs, and runs startup DB init/migrations
   - `backend/routers/` contains API route modules (accounts, kdp, video, publisher, scraper, logs, settings)
   - `backend/models/` contains SQLAlchemy models
-  - `backend/services/` contains background workers and platform uploaders (Playwright, yt-dlp, Groq helpers)
+  - `backend/services/` contains background workers, platform uploaders, and shared integrations/notifiers (Playwright, yt-dlp, Groq helpers, Telegram notifier, dll.)
+  - `backend/services/publisher_dispatcher.py` is the current lightweight DB polling dispatcher for queued/scheduled jobs
 - `docs/` contains project documentation (overview, deployment, architecture, API reference).
+- `skills/` dan `frontend/skills/` berisi skill internal project yang harus diprioritaskan saat task cocok dengan skill tersebut.
 - Runtime/data directories at repo root (usually gitignored): `projects/`, `video_projects/`, `upload_queue/`, `data/`, `chrome_profile/`, `global_profiles/`.
+
+## Current Product Direction
+- Tujuan utama project sekarang adalah flow yang sederhana dan user friendly:
+  - `Assets -> Queue Builder -> Runs`
+- Untuk tahap awal create/brief, entry point utama sekarang adalah:
+  - `Ideation Hub` di `/ideation`
+- `Ideation Hub` dipakai sebagai jembatan utama bersama untuk video dan image sebelum user bercabang ke prompt builder, generator, project assets, atau runs.
+- Halaman project video sekarang juga menyediakan:
+  - `Manual Upload` untuk fast-track dari file lokal ke project dan opsional langsung ke Queue Builder
+- Route frontend utama untuk publishing flow adalah:
+  - `/queue-builder`
+- Route `/publisher` dipertahankan sebagai compatibility redirect.
+- Untuk status implementasi terbaru dan ringkasan perubahan besar, baca:
+  - `CHANGELOG.md`
+  - `docs/queue_job_worker_recommendations.md`
+  - `docs/architecture.md`
+- Saat mengerjakan area queue/job, anggap Queue Builder sebagai flow utama, dan anggap endpoint/route `publisher` sebagai layer kompatibilitas yang masih hidup.
 
 ## Build, Test, and Development Commands
 - Backend (from repo root):
@@ -26,6 +46,9 @@ dikerjakan di windows os
   - `npm run build` (typecheck + production build)
   - `npm run start` (serve production build)
   - `npm run lint`
+- Quick smoke checks after feature changes:
+  - frontend UI/API changes: `cd frontend && npm run build`
+  - backend syntax/import safety: `python -c "import backend.main; print('ok')"`
 - Convenience (Windows):
   - `setup_local.bat` sets up backend venv + frontend deps
   - `run_local.bat` runs backend + frontend in separate terminals
@@ -40,12 +63,26 @@ dikerjakan di windows os
 - Komponen tingkat-atas (seperti PageHeader, StatusBadge, EmptyState, ProjectDrawer) harus dibangun di atas primitive `ui/*` tersebut, bukan langsung memakai HTML + class acak di setiap halaman.
 - Prefer reusable UI patterns: `PageHeader`, `EmptyState`, `StatusBadge`, `ViewToggle`, `SegmentedTabs`, `KpiCard`, dan `ProjectDrawer` untuk menjaga konsistensi lintas halaman.
 - Refer to `docs/shadcn_first_ui.md` before implementing or refactoring frontend UI.
+- Untuk settings/integrations, utamakan pola existing di `frontend/src/app/settings/page.tsx` dan route settings di `backend/routers/settings.py`.
+- Untuk integrasi eksternal atau notifikasi, utamakan shared service di `backend/services/*` daripada memanggil HTTP/API langsung dari banyak router.
+
+## Skill Usage Rules
+- Sebelum implementasi fitur yang tidak trivial, periksa skill yang relevan di `skills/*/SKILL.md` dan/atau `frontend/skills/*/SKILL.md`.
+- Jika task menyentuh area spesifik, baca skill yang paling dekat dulu, misalnya:
+  - FastAPI/backend feature: `skills/fastapi-feature-builder/SKILL.md`
+  - Next.js/shadcn UI: `skills/nextjs-ui-integrator/SKILL.md`
+  - Queue/publisher/job reliability: `skills/queue-workflow-reliability/SKILL.md`
+  - Upload rollout: `skills/upload-feature-rollout/SKILL.md`
+  - Telegram notification/integration: `skills/telegram-notification-integration/SKILL.md`
+- Jangan load semua skill sekaligus. Baca secukupnya yang relevan dengan task aktif agar konteks tetap ramping.
+- Jika menambah workflow reusable baru, pertimbangkan update skill terkait atau tambahkan skill baru agar pengetahuan project tidak hilang.
 
 ## Testing Guidelines
 - No unit-test runner is configured yet.
 - For smoke checks:
   - `frontend`: run `npm run build` (this will typecheck)
   - `backend`: start `uvicorn` and verify `/docs` loads
+- Untuk perubahan settings/integrations, verifikasi endpoint settings terkait tersedia di `/docs` dan UI settings tetap bisa dibuka/build.
 - If you add tests, document the command and keep naming consistent.
 
 ## Commit & Pull Request Guidelines
@@ -56,6 +93,8 @@ dikerjakan di windows os
 ## Security & Configuration Tips
 - Avoid committing secrets and local data:
   - `config.json` (may contain `groq_api_key`)
+  - `config.json` juga bisa berisi `telegram.bot_token` dan `telegram.chat_id`
   - `config/youtube_secrets/*` (OAuth client secrets)
   - `data/`, `chrome_profile/`, `global_profiles/`, `*.db`
 - For production deployments, do not expose the API publicly without authentication/rate limits.
+- Saat menampilkan status setting sensitif di UI/API, mask token/key dan jangan kirim nilai utuh kembali ke frontend.

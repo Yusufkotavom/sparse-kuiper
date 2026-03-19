@@ -134,9 +134,20 @@ Sumber kebenaran utama schema request/response ada di Swagger: `http://localhost
 - `PUT /api/v1/settings/gemini-api-key`
 - `GET /api/v1/settings/azure-openai`
 - `PUT /api/v1/settings/azure-openai`
+- `GET /api/v1/settings/telegram`
+- `PUT /api/v1/settings/telegram`
+- `POST /api/v1/settings/telegram/test`
 - `GET /api/v1/settings/looper-presets`
+- `POST /api/v1/settings/looper-presets`
 - `PUT /api/v1/settings/looper-presets/{name}`
 - `DELETE /api/v1/settings/looper-presets/{name}`
+
+## Notification Notes
+- Telegram settings disimpan di `config.json` pada blok `telegram`.
+- Test message dipicu dari `POST /api/v1/settings/telegram/test`.
+- Notifikasi Telegram saat ini dipakai untuk:
+  - generation task sukses/gagal
+  - publisher upload single/batch per file saat status akhir tercapai
 
 ## Looper
 - `POST /api/v1/looper/run`

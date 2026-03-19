@@ -173,3 +173,47 @@ body {
 .datepicker-popper-high {
   z-index: 9999 !important;
 }
+
+.system-toast {
+  border: 1px solid color-mix(in srgb, var(--border) 76%, white) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white) 0%, var(--background) 100%) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.35) !important;
+  color: var(--foreground) !important;
+  padding: 14px 16px !important;
+  width: min(420px, calc(100vw - 24px)) !important;
+}
+
+.system-toast::before {
+  content: "";
+  display: block;
+  height: 3px;
+  margin: -14px -16px 12px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, #0a84ff 0%, #63a9ff 100%);
+}
+
+.system-toast-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+
+.system-toast-description {
+  color: color-mix(in srgb, var(--foreground) 78%, transparent) !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+.system-toast-action,
+.system-toast-cancel,
+.system-toast-close {
+  border-radius: 10px !important;
+}
+
+.system-toast-close {
+  border-color: var(--border) !important;
+  background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
+  color: var(--foreground) !important;
+}

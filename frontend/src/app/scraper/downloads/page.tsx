@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useSystemUi } from "@/components/system/SystemUiProvider";
 import { getApiBase } from "@/lib/api";
 import {
     Loader2, ArrowLeft, Trash2, FolderOpen, Send, PlayCircle, Search, X,
     Pencil, Sparkles, Tag, AlignLeft, Type, CheckCircle2
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface DownloadedFile {
     filename: string;
@@ -33,6 +35,7 @@ interface MetadataEdit {
 }
 
 function DownloadsContent() {
+    const { confirm } = useSystemUi();
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -101,7 +104,13 @@ function DownloadsContent() {
     }, [activeProject, fetchDownloads, router]);
 
     const handleDelete = async (filename: string) => {
-        if (!confirm(`Are you sure you want to delete ${filename}?`)) return;
+        const confirmed = await confirm({
+            title: `Delete ${filename}?`,
+            description: "This downloaded file will be removed from the scraper project.",
+            confirmLabel: "Delete",
+            destructive: true,
+        });
+        if (!confirmed) return;
         try {
             const res = await fetch(
                 `${getApiBase()}/scraper-projects/${encodeURIComponent(activeProject)}/downloads/${encodeURIComponent(filename)}`,
@@ -110,7 +119,7 @@ function DownloadsContent() {
             if (res.ok) {
                 setFiles(files.filter(f => f.filename !== filename));
             } else {
-                alert("Failed to delete file.");
+                toast.error("Failed to delete file.");
             }
         } catch (e) {
             console.error(e);
@@ -147,11 +156,11 @@ function DownloadsContent() {
                 });
             } else {
                 const err = await res.json();
-                alert(`AI Error: ${err.detail || "Failed to generate"}`);
+                toast.error(err.detail || "Failed to generate");
             }
         } catch (e) {
             console.error(e);
-            alert("Failed to connect to AI service");
+            toast.error("Failed to connect to AI service");
         } finally {
             setIsGeneratingAI(false);
         }
@@ -176,14 +185,14 @@ function DownloadsContent() {
                 }
             );
             if (res.ok) {
-                alert(`✅ Successfully sent to Queue Builder!`);
+                toast.success("Successfully sent to Queue Builder.");
                 if (queueAction === "move") {
                     setFiles(files.filter(f => f.filename !== editFile.filename));
                 }
                 setEditFile(null);
             } else {
                 const err = await res.json();
-                alert(`Failed: ${err.detail}`);
+                toast.error(err.detail || "Failed to send to queue");
             }
         } catch (e) {
             console.error(e);

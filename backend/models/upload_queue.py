@@ -25,6 +25,8 @@ class UploadQueueItem(Base):
     attempt_count = Column(Integer, default=0)
     last_error = Column(Text, nullable=True)
     last_run_at = Column(UTC_DATETIME, nullable=True)
+    next_retry_at = Column(UTC_DATETIME, nullable=True)
+    lease_expires_at = Column(UTC_DATETIME, nullable=True)
     
     file_path = Column(String, nullable=True)
     project_dir = Column(String, nullable=True)
@@ -91,4 +93,6 @@ class UploadQueueItem(Base):
             "attempt_count": self.attempt_count,
             "last_error": self.last_error or "",
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "next_retry_at": self.next_retry_at.isoformat() if self.next_retry_at else None,
+            "lease_expires_at": self.lease_expires_at.isoformat() if self.lease_expires_at else None,
         }

@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = ""
 
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_notifications_enabled: bool = False
+
 settings = Settings()
 
 def load_local_config():
@@ -57,6 +61,14 @@ def load_local_config():
                     settings.azure_openai_deployment = azure.get("deployment", "") or ""
                 if "api_version" in azure:
                     settings.azure_openai_api_version = azure.get("api_version", "") or ""
+
+                telegram = data.get("telegram", {}) if isinstance(data.get("telegram", {}), dict) else {}
+                if "bot_token" in telegram:
+                    settings.telegram_bot_token = telegram.get("bot_token", "") or ""
+                if "chat_id" in telegram:
+                    settings.telegram_chat_id = str(telegram.get("chat_id", "") or "")
+                if "enabled" in telegram:
+                    settings.telegram_notifications_enabled = bool(telegram.get("enabled", False))
         except Exception as e:
             print(f"Error loading local config: {e}")
 

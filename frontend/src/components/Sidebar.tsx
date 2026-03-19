@@ -41,8 +41,10 @@ const NAV_GROUPS: NavGroup[] = [
                 icon: BookOpen,
                 href: "/kdp",
                 children: [
-                    { label: "Ideation", icon: Wand2, href: "/kdp/ideation" },
-                    { label: "Curation", icon: ImageIcon, href: "/kdp/curation" },
+                    { label: "Ideation Hub", icon: Wand2, href: "/ideation?mode=image" },
+                    { label: "Prompt Builder", icon: Wand2, href: "/kdp/ideation" },
+                    { label: "Curation Hub", icon: ImageIcon, href: "/curation?mode=image" },
+                    { label: "Curation Workspace", icon: ImageIcon, href: "/kdp/curation" },
                 ],
             },
             {
@@ -50,8 +52,10 @@ const NAV_GROUPS: NavGroup[] = [
                 icon: Youtube,
                 href: "/video",
                 children: [
-                    { label: "Ideation", icon: Wand2, href: "/video/ideation" },
-                    { label: "Curation", icon: ImageIcon, href: "/video/curation" },
+                    { label: "Ideation Hub", icon: Wand2, href: "/ideation?mode=video" },
+                    { label: "Prompt Builder", icon: Wand2, href: "/video/ideation" },
+                    { label: "Curation Hub", icon: ImageIcon, href: "/curation?mode=video" },
+                    { label: "Curation Workspace", icon: ImageIcon, href: "/video/curation" },
                     { label: "Muxing", icon: Scissors, href: "/video/muxing" },
                     { label: "Creator Studio", icon: Layout, href: "/video/creator-studio" },
                 ],
@@ -87,7 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
             {
                 label: "Queue Builder",
                 icon: Share2,
-                href: "/publisher",
+                href: "/queue-builder",
             },
         ],
     },

@@ -12,7 +12,7 @@ function buildPublisherHref(searchParams: RedirectSearchParams) {
   }
 
   const query = params.toString();
-  return query ? `/publisher?${query}` : "/publisher";
+  return query ? `/queue-builder?${query}` : "/queue-builder";
 }
 
 export default function QueuePage({ searchParams = {} }: { searchParams?: RedirectSearchParams }) {

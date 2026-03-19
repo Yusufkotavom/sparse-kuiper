@@ -33,6 +33,28 @@ def _publish_queue_event(db: Session, item: UploadQueueItem, event_type: str):
     )
 
 
+def _has_job_config(item: UploadQueueItem) -> bool:
+    return bool((item.target_platforms or []) and (item.account_map or {}))
+
+
+def sync_queue_job_state(item: UploadQueueItem) -> None:
+    if not _has_job_config(item):
+        item.worker_state = "pending"
+        item.next_retry_at = None
+        item.lease_expires_at = None
+        if (item.status or "").strip().lower() not in {"completed", "completed_with_errors", "failed", "archived"}:
+            item.status = "pending"
+        return
+
+    if item.scheduled_at:
+        item.worker_state = "scheduled"
+    else:
+        item.worker_state = "queued"
+
+    if (item.status or "").strip().lower() not in {"uploading", "completed", "completed_with_errors", "failed", "archived"}:
+        item.status = "queued"
+
+
 @router.get("/queue", response_model=Dict[str, Any])
 async def get_upload_queue(db: Session = Depends(get_db)):
     items = db.query(UploadQueueItem).filter(UploadQueueItem.status != "archived").all()
@@ -42,6 +64,7 @@ async def get_upload_queue(db: Session = Depends(get_db)):
     dirty = False
 
     for item in items:
+        sync_queue_job_state(item)
         file_path = item.file_path if item.file_path and os.path.exists(item.file_path) else str(UPLOAD_QUEUE_DIR / item.filename)
         if os.path.exists(file_path):
             if (not item.file_path) or (item.file_path != file_path):
@@ -291,6 +314,7 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
         db.add(item)
 
     item.status = "pending"
+    item.worker_state = "pending"
     item.title = request.title
     item.description = request.description
     item.tags = request.tags
@@ -631,6 +655,9 @@ async def update_queue_config(request: QueueConfigRequest, db: Session = Depends
         item.scheduled_at = datetime.fromisoformat(request.schedule) if request.schedule else None
     except Exception:
         item.scheduled_at = None
+    sync_queue_job_state(item)
+    if item.worker_state in {"queued", "scheduled"}:
+        item.last_error = None
     _publish_queue_event(db, item, "updated")
     db.commit()
     return {"message": "Queue config updated"}
@@ -672,6 +699,8 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
             except Exception:
                 pass
             item.scheduled_at = scheduled
+        else:
+            item.scheduled_at = None
         if publish_start_dt:
             day_offset = idx // max(request.posts_per_day, 1)
             slot_idx = idx % max(request.posts_per_day, 1)
@@ -684,6 +713,9 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
             opts = item.options or {}
             opts["platform_publish_schedule"] = publish_scheduled.isoformat()
             item.options = opts
+        sync_queue_job_state(item)
+        if item.worker_state in {"queued", "scheduled"}:
+            item.last_error = None
         _publish_queue_event(db, item, "updated")
     db.commit()
     return {"message": "Bulk queue config updated", "count": len(request.filenames)}

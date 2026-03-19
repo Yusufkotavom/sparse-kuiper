@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   "/scraper": "Web Scraper",
   "/runs": "Runs",
   "/publisher": "Queue Builder",
+  "/queue-builder": "Queue Builder",
   "/accounts": "Accounts",
   "/drive": "Drive Explorer",
   "/settings": "Settings",

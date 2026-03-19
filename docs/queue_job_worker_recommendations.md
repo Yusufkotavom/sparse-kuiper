@@ -253,3 +253,151 @@ Hindari istilah teknis berlebihan. Gunakan label berikut:
 - Oldest queued age (job paling lama belum diproses)
 
 Jika 5 KPI ini terlihat di dashboard, kebingungan operasional biasanya turun drastis.
+
+---
+
+## Status Implementasi Saat Ini
+
+Bagian ini merangkum progres implementasi aktual di codebase setelah beberapa wave refactor UX + backend alignment.
+
+### Ringkasan singkat
+
+- **Flow user utama**: sudah terbentuk dan bisa dipakai untuk operasional dasar.
+- **Queue Builder**: sudah menjadi nama utama di frontend dan route utama ada di `/queue-builder`.
+- **Runs**: sudah menjadi hub monitor utama untuk job/queue.
+- **Dispatcher worker DB-backed**: sudah ada versi dasar.
+- **Durability**: sudah ada lease dasar dan retry dasar, tetapi belum enterprise-grade.
+- **Split tabel asset/job**: belum dilakukan, model masih bertumpu pada `upload_queue`.
+
+### Checklist tujuan utama
+
+#### 1) User bisa ambil asset dari project
+- `Done`
+- User bisa memilih asset dari `Project Manager`.
+- Ada flow single dan bulk.
+- Asset dapat dikirim ke queue dari halaman project.
+
+#### 2) User bisa memilih channel/platform dengan sederhana
+- `Done`
+- Halaman **Queue Builder** sudah menyediakan:
+  - pilih platform
+  - pilih account per platform
+  - metadata edit
+  - bulk schedule setup
+
+#### 3) User bisa memilih `Post Now` atau `Schedule`
+- `Done`
+- Queue Builder sudah mendukung mode langsung dan terjadwal.
+- Bulk schedule dengan `posts per day` dan `time gap hours` juga sudah ada.
+
+#### 4) User membuat job, bukan upload langsung dari form utama
+- `Done`
+- Flow utama Queue Builder sekarang menulis metadata + config job via endpoint queue config.
+- Frontend tidak lagi menjadikan `upload/*` sebagai jalur utama create job.
+
+#### 5) User bisa monitor semua job dari satu tempat
+- `Done`
+- Halaman **Runs** sudah berfungsi sebagai operational hub.
+- Halaman legacy `/queue`, `/jobs`, `/queue-manager` sudah diarahkan ke flow baru.
+
+#### 6) Worker mengambil job dari DB yang durable
+- `In Progress`
+- Sudah ada dispatcher polling yang mengambil item `queued/scheduled` dari DB.
+- Startup backend otomatis menyalakan dispatcher.
+- Namun implementasi masih versi ringan di dalam proses FastAPI.
+
+#### 7) Queue/job state lebih konsisten
+- `In Progress`
+- State yang saat ini sudah dipakai secara praktis:
+  - `pending`
+  - `queued`
+  - `scheduled`
+  - `running`
+  - `completed`
+  - `failed`
+  - `canceled`
+- Endpoint config queue sekarang menyinkronkan state ke `queued/scheduled`.
+
+#### 8) Retry dan recovery job ada
+- `In Progress`
+- Sudah ada:
+  - `next_retry_at`
+  - `lease_expires_at`
+  - retry dasar dengan backoff
+- Belum ada:
+  - retry policy granular per platform
+  - dashboard retry yang eksplisit
+  - ownership token/heartbeat yang kuat
+
+#### 9) Error terlihat dan cukup user-friendly
+- `Done`
+- Error terakhir sudah mulai terlihat di Queue Builder picker.
+- History dan last error sudah tersedia di Runs/Published.
+
+#### 10) Arsitektur target penuh (`assets`, `publish_jobs`, `publish_job_targets`, `job_events`)
+- `Not Started`
+- Saat ini seluruh concern masih banyak bertumpu di tabel `upload_queue`.
+
+### Yang sudah berubah dibanding audit awal
+
+1. **Naming UX**
+   - Frontend sekarang memakai istilah **Queue Builder** sebagai nama utama.
+   - Route utama frontend: `/queue-builder`.
+   - `/publisher` tetap dipertahankan sebagai redirect kompatibilitas.
+
+2. **Flow frontend**
+   - `Assets -> Queue Builder -> Runs` sudah terlihat jelas di UI.
+   - Queue Builder sekarang bisa dibuka langsung tanpa query file, lalu user memilih item dari **Queue Source Picker**.
+   - Flow bulk dari Project Manager sekarang bisa langsung mendarat ke Queue Builder dengan item terseleksi.
+
+3. **Config-first job creation**
+   - Queue Builder sekarang menggunakan:
+     - `updateQueueMetadata`
+     - `updateQueueConfig`
+     - `bulkUpdateQueueConfig`
+   - Ini lebih dekat ke konsep enqueue/configure job daripada direct upload.
+
+4. **Dispatcher dasar**
+   - Sudah ada service dispatcher yang:
+     - polling DB
+     - memilih job `queued/scheduled`
+     - memperhatikan `scheduled_at`
+     - memperhatikan `next_retry_at`
+     - memperhatikan `lease_expires_at`
+     - menjalankan upload per platform
+
+5. **Legacy compatibility**
+   - Endpoint `upload/*` lama masih dipertahankan.
+   - Namun endpoint legacy sekarang ikut menulis konfigurasi job dengan lebih konsisten sebelum eksekusi.
+
+### Gap terbesar yang masih tersisa
+
+1. **Model data masih campuran**
+   - `upload_queue` masih menyimpan asset queue, config job, execution state, retry info, dan result platform.
+
+2. **Dispatcher masih embedded**
+   - Dispatcher masih berjalan sebagai thread di proses FastAPI.
+   - Belum dipisahkan menjadi worker process/service dedicated.
+
+3. **Belum ada `job_events`**
+   - Belum ada audit trail granular seperti `queued`, `leased`, `running`, `retrying`, `done`, `failed`, `canceled`.
+
+4. **Pause/Cancel belum menghentikan proses aktif secara hard**
+   - State sudah bisa berubah, tetapi penghentian subprocess aktif belum sepenuhnya kuat.
+
+5. **Belum ada identitas job yang stabil selain filename**
+   - Ini masih rawan jika suatu saat filename collision menjadi masalah operasional.
+
+### Kesimpulan praktis
+
+Saat ini project sudah:
+- **cukup user friendly untuk dipakai**
+- **cukup rapi untuk operasional dasar**
+- **sudah bergerak ke durable queue model**
+
+Tetapi project **belum selesai** jika target akhirnya adalah arsitektur worker yang benar-benar kuat dan scalable. Fokus lanjutan yang paling penting setelah ini:
+
+1. Tambahkan `job_events`.
+2. Pisahkan asset vs job secara bertahap.
+3. Pindahkan dispatcher menjadi service/worker dedicated.
+4. Tambahkan observability retry/lease yang lebih matang.

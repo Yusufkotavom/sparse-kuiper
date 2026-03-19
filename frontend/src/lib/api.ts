@@ -235,6 +235,37 @@ export const videoApi = {
         });
     },
 
+    uploadProjectVideos: async (
+        projectName: string,
+        files: File[],
+        opts?: { targetStage?: "raw" | "final" },
+    ): Promise<ProjectVideoUploadResponse> => {
+        const endpoint = `/video/projects/${encodeURIComponent(projectName)}/upload`;
+        const adaptedEndpoint = mapEndpointForVersion(endpoint, API_TARGET_VERSION);
+        const formData = new FormData();
+        files.forEach((file) => formData.append("files", file));
+        formData.append("target_stage", opts?.targetStage || "raw");
+
+        let response = await fetch(buildApiUrl(adaptedEndpoint), {
+            method: "POST",
+            body: formData,
+        });
+
+        if (!response.ok && adaptedEndpoint !== endpoint && [404, 405, 410].includes(response.status)) {
+            response = await fetch(buildApiUrl(endpoint), {
+                method: "POST",
+                body: formData,
+            });
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `API request failed with status: ${response.status}`);
+        }
+
+        return response.json();
+    },
+
     bulkDeleteProjectVideos: async (projectName: string, filenames: string[]): Promise<{ status: string; message: string; errors?: string[] }> => {
         return fetchApi<{ status: string; message: string; errors?: string[] }>(`/video/projects/${projectName}/videos`, {
             method: "DELETE",
@@ -329,6 +360,17 @@ export interface ProjectConfig {
     whisk_account_id?: string;
 }
 
+export interface ProjectVideoUploadResponse {
+    status: string;
+    message: string;
+    uploaded: Array<{
+        filename: string;
+        relative_path: string;
+        stage: "raw" | "final" | string;
+    }>;
+    errors?: string[];
+}
+
 /**
  * Template type definition
  */
@@ -398,6 +440,14 @@ export interface LooperPreset {
     watermark_key_green?: boolean;
 }
 
+export interface TelegramSettings {
+    enabled: boolean;
+    has_bot_token: boolean;
+    masked_bot_token: string;
+    chat_id: string;
+    has_chat_id: boolean;
+}
+
 /**
  * Settings / Prompt Management API Calls
  */
@@ -426,6 +476,30 @@ export const settingsApi = {
 
     deleteLooperPreset: async (name: string): Promise<{ status: string; message: string }> => {
         return fetchApi<{ status: string; message: string }>(`/settings/looper-presets/${encodeURIComponent(name)}`, {
+            method: "DELETE",
+        });
+    },
+
+    listConcatPresets: async (): Promise<ConcatPreset[]> => {
+        return fetchApi<ConcatPreset[]>("/settings/concat-presets");
+    },
+
+    createConcatPreset: async (preset: ConcatPreset): Promise<{ status: string; message: string }> => {
+        return fetchApi<{ status: string; message: string }>("/settings/concat-presets", {
+            method: "POST",
+            body: JSON.stringify(preset),
+        });
+    },
+
+    updateConcatPreset: async (name: string, preset: ConcatPreset): Promise<{ status: string; message: string }> => {
+        return fetchApi<{ status: string; message: string }>(`/settings/concat-presets/${encodeURIComponent(name)}`, {
+            method: "PUT",
+            body: JSON.stringify(preset),
+        });
+    },
+
+    deleteConcatPreset: async (name: string): Promise<{ status: string; message: string }> => {
+        return fetchApi<{ status: string; message: string }>(`/settings/concat-presets/${encodeURIComponent(name)}`, {
             method: "DELETE",
         });
     },
@@ -474,6 +548,24 @@ export const settingsApi = {
         });
     },
 
+    getTelegramSettings: async (): Promise<TelegramSettings> => {
+        return fetchApi<TelegramSettings>("/settings/telegram");
+    },
+
+    setTelegramSettings: async (payload: { enabled: boolean; bot_token?: string; chat_id?: string }): Promise<{ status: string }> => {
+        return fetchApi<{ status: string }>("/settings/telegram", {
+            method: "PUT",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    testTelegramSettings: async (message?: string): Promise<{ status: string; message: string }> => {
+        return fetchApi<{ status: string; message: string }>("/settings/telegram/test", {
+            method: "POST",
+            body: JSON.stringify({ message }),
+        });
+    },
+
     createTemplate: async (template: PromptTemplate): Promise<{ status: string; message: string }> => {
         return fetchApi<{ status: string; message: string }>("/settings/templates", {
             method: "POST",
@@ -496,7 +588,9 @@ export const settingsApi = {
 };
 
 // ==========================================
-// PUBLISHER API
+// QUEUE BUILDER API
+// Legacy backend routes still use `/publisher`, so `publisherApi`
+// remains exported as a compatibility alias.
 // ==========================================
 export type PublisherJob = {
     filename: string;
@@ -746,6 +840,9 @@ export const publisherApi = {
         });
     }
 };
+
+export const queueBuilderApi = publisherApi;
+export type QueueBuilderJob = PublisherJob;
 // ==========================================
 // ACCOUNTS API
 // ==========================================
@@ -1036,6 +1133,80 @@ export const looperApi = {
             throw new Error(errorData.detail || `API request failed with status: ${response.status}`);
         }
         return response.json();
+    },
+};
+
+// ==========================================
+// CONCAT API
+// ==========================================
+
+export interface TrimPoint {
+    start: number;
+    end: number;
+}
+
+export interface ConcatPreset {
+    name: string;
+    description?: string;
+    transition_type: "cut" | "crossfade" | "dip_to_black" | "glitch";
+    transition_duration: number;
+    resolution: "original" | "1080p" | "720p" | "480p";
+    quality: "high" | "medium" | "low";
+    mute_original_audio: boolean;
+    enable_audio_fade: boolean;
+    audio_fade_duration: number;
+    background_music_volume: number;
+}
+
+export interface ConcatRunPayload {
+    project: string;
+    files: string[];
+    trim_settings?: Record<string, TrimPoint>;
+    output_suffix?: string;
+    transition_type?: "cut" | "crossfade" | "dip_to_black" | "glitch";
+    transition_duration?: number;
+    resolution?: "original" | "1080p" | "720p" | "480p";
+    quality?: "high" | "medium" | "low";
+    mute_original_audio?: boolean;
+    enable_audio_fade?: boolean;
+    audio_fade_duration?: number;
+    background_music_file?: string | null;
+    background_music_volume?: number;
+}
+
+export interface ConcatJobStatus {
+    job_id: string;
+    status: "pending" | "running" | "done" | "error";
+    progress: number;
+    stage: number;
+    stage_label: string;
+    current_video?: string | null;
+    output_path?: string | null;
+    error?: string | null;
+    finished_at?: number | null;
+}
+
+export const concatApi = {
+    run: async (payload: ConcatRunPayload): Promise<{ job_id: string; message: string }> => {
+        return fetchApi<{ job_id: string; message: string }>("/concat/run", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    getStatus: async (jobId: string): Promise<ConcatJobStatus> => {
+        return fetchApi<ConcatJobStatus>(`/concat/status/${jobId}`);
+    },
+
+    cancel: async (jobId: string): Promise<{ message: string }> => {
+        return fetchApi<{ message: string }>(`/concat/cancel/${jobId}`, {
+            method: "POST",
+        });
+    },
+
+    getFileInfo: async (project: string, file: string): Promise<LooperFileInfo> => {
+        const params = new URLSearchParams({ project, file });
+        return fetchApi<LooperFileInfo>(`/concat/file-info?${params.toString()}`);
     },
 };
 

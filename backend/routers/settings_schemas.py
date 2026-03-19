@@ -80,3 +80,26 @@ class AzureOpenAIPayload(BaseModel):
     api_key: Optional[str] = None
     deployment: Optional[str] = None
     api_version: Optional[str] = None
+
+
+class TelegramSettingsPayload(BaseModel):
+    enabled: bool = False
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+
+
+class TelegramTestPayload(BaseModel):
+    message: Optional[str] = None
+
+
+class ConcatPreset(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    transition_type: str = "cut"
+    transition_duration: float = 1.0
+    resolution: str = "original"
+    quality: str = "high"
+    mute_original_audio: bool = False
+    enable_audio_fade: bool = True
+    audio_fade_duration: float = 2.0
+    background_music_volume: int = 50

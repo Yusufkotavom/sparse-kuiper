@@ -9,7 +9,7 @@ import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { publisherApi, type PublisherJob, type QueueItem } from "@/lib/api";
+import { queueBuilderApi, type QueueBuilderJob, type QueueItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CalendarClock, ExternalLink, History, Loader2, Pause, Play, RefreshCw, SquareX } from "lucide-react";
 
@@ -103,7 +103,7 @@ function RunsContent() {
   const [tab, setTab] = useState<RunsTab>(initialTab);
   const [isLoading, setIsLoading] = useState(false);
   const [queue, setQueue] = useState<RunsQueueItem[]>([]);
-  const [jobs, setJobs] = useState<PublisherJob[]>([]);
+  const [jobs, setJobs] = useState<QueueBuilderJob[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
 
@@ -116,7 +116,7 @@ function RunsContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const [queueRes, jobsRes] = await Promise.all([publisherApi.getQueue(), publisherApi.getJobs()]);
+      const [queueRes, jobsRes] = await Promise.all([queueBuilderApi.getQueue(), queueBuilderApi.getJobs()]);
       setQueue((queueRes.queue || []) as RunsQueueItem[]);
       setJobs(jobsRes.jobs || []);
     } catch (err) {
@@ -277,10 +277,10 @@ function RunsContent() {
     setActionKey(`${action}:${run.id}`);
     setError(null);
     try {
-      if (action === "runNow") await publisherApi.runNowJob(run.filename);
-      if (action === "pause") await publisherApi.pauseJob(run.filename);
-      if (action === "resume") await publisherApi.resumeJob(run.filename);
-      if (action === "cancel") await publisherApi.cancelJob(run.filename);
+      if (action === "runNow") await queueBuilderApi.runNowJob(run.filename);
+      if (action === "pause") await queueBuilderApi.pauseJob(run.filename);
+      if (action === "resume") await queueBuilderApi.resumeJob(run.filename);
+      if (action === "cancel") await queueBuilderApi.cancelJob(run.filename);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menjalankan aksi job.");
@@ -336,7 +336,7 @@ function RunsContent() {
             <Link href="/project-manager" className={buttonVariants({ variant: "outline", size: "sm" })}>
               Open Assets
             </Link>
-            <Link href="/publisher" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Link href="/queue-builder" className={buttonVariants({ variant: "outline", size: "sm" })}>
               Open Queue Builder
             </Link>
           </div>
@@ -376,14 +376,14 @@ function RunsContent() {
           icon={CalendarClock}
           title="Belum ada data pada tab ini"
           description="Coba tab lain, ubah filter, atau refresh data dari backend."
-          action={intent === "publisher" ? { label: "Open Queue Builder", onClick: () => router.push("/publisher") } : undefined}
+          action={intent === "publisher" ? { label: "Open Queue Builder", onClick: () => router.push("/queue-builder") } : undefined}
         />
       ) : null}
 
       {visibleRuns.length > 0 && (
         <div className="space-y-2">
           {visibleRuns.map((run) => {
-            const publisherHref = buildSearchHref("/publisher", { file: run.filename });
+            const publisherHref = buildSearchHref("/queue-builder", { file: run.filename });
             const publishedRowHref = buildSearchHref("/published", {
               project: queryProject || null,
               file: run.filename,

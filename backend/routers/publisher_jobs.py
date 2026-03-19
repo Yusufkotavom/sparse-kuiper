@@ -5,6 +5,7 @@ from datetime import datetime
 from backend.core.database import get_db
 from backend.models.upload_queue import UploadQueueItem
 from backend.routers.publisher_schemas import UploadRequest, TagsRequest, RescheduleRequest
+from backend.routers.publisher_queue import sync_queue_job_state
 from backend.routers.publisher_uploads import process_upload_task
 
 
@@ -112,6 +113,8 @@ async def jobs_run_now(filename: str, background_tasks: BackgroundTasks, db: Ses
     item.worker_state = "running"
     item.last_run_at = datetime.now()
     item.attempt_count = (item.attempt_count or 0) + 1
+    item.next_retry_at = None
+    item.lease_expires_at = None
     db.commit()
     for p in plats:
         req = _build_upload_request_for_platform(item, p, run_now=True)
@@ -125,6 +128,7 @@ async def jobs_pause(filename: str, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
     item.worker_state = "paused"
+    item.lease_expires_at = None
     db.commit()
     return {"message": "Job paused"}
 
@@ -134,7 +138,7 @@ async def jobs_resume(filename: str, db: Session = Depends(get_db)):
     item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == filename).first()
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
-    item.worker_state = "scheduled"
+    sync_queue_job_state(item)
     db.commit()
     return {"message": "Job resumed"}
 
@@ -145,6 +149,7 @@ async def jobs_cancel(filename: str, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
     item.worker_state = "canceled"
+    item.lease_expires_at = None
     db.commit()
     return {"message": "Job canceled"}
 
@@ -156,7 +161,7 @@ async def jobs_reschedule(req: RescheduleRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Queue item not found")
     try:
         item.scheduled_at = datetime.fromisoformat(req.schedule)
-        item.worker_state = "scheduled"
+        sync_queue_job_state(item)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid schedule format")
     db.commit()
@@ -188,6 +193,7 @@ async def jobs_delete(filename: str, db: Session = Depends(get_db)):
     item.attempt_count = 0
     item.last_error = None
     item.last_run_at = None
+    item.next_retry_at = None
+    item.lease_expires_at = None
     db.commit()
     return {"message": "Job configuration cleared"}
-

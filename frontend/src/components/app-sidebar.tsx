@@ -21,14 +21,16 @@ const data = {
   navMain: [
     {
       title: "Create",
-      url: "/video/ideation",
+      url: "/ideation",
       icon: <WandSparklesIcon />,
       isActive: true,
       items: [
-        { title: "Video Ideation", url: "/video/ideation" },
-        { title: "Video Curation", url: "/video/curation" },
-        { title: "Image Creation Ideation", url: "/kdp/ideation" },
-        { title: "Image Creation Curation", url: "/kdp/curation" },
+        { title: "Ideation Hub", url: "/ideation" },
+        { title: "Video Prompt Builder", url: "/video/ideation" },
+        { title: "Curation Hub", url: "/curation" },
+        { title: "Video Curation Workspace", url: "/video/curation" },
+        { title: "Image Prompt Builder", url: "/kdp/ideation" },
+        { title: "Image Curation Workspace", url: "/kdp/curation" },
         { title: "Audio Kokoro", url: "/audio/kokoro" },
         { title: "Scraper", url: "/scraper" },
         { title: "Pipeline Templates", url: "/pipeline-templates" },

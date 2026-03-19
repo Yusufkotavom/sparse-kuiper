@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Bot, Loader2, Sparkles, Trophy } from "lucide-react";
+import { toast } from "sonner";
 
 type PromptVariant = {
     key: "A" | "B";
@@ -145,7 +146,7 @@ export default function PromptPlaygroundPage() {
             setSelectedTemplate((prev) => ({ ...prev, [key]: templateName }));
             setTemplateDraftName((prev) => ({ ...prev, [key]: templateName }));
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Gagal simpan template");
+            toast.error(e instanceof Error ? e.message : "Gagal simpan template");
         } finally {
             setTemplateActionLoading(null);
         }
@@ -162,7 +163,7 @@ export default function PromptPlaygroundPage() {
             setSelectedTemplate((prev) => ({ ...prev, [key]: "" }));
             setTemplateDraftName((prev) => ({ ...prev, [key]: "" }));
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Gagal hapus template");
+            toast.error(e instanceof Error ? e.message : "Gagal hapus template");
         } finally {
             setTemplateActionLoading(null);
         }

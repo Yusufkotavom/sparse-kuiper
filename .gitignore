@@ -95,3 +95,8 @@ cloudflared.yml
 ssh-key-2026-03-16 (3).ppk
 ssh-key-2026-03-16.key (3).pub
 www.youtube.com_cookies (1).txt
+
+/backend/.hypothesis/constants/*
+/backend/.hypothesis/examples/
+/.hypothesis/constants
+/.hypothesis

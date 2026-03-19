@@ -21,6 +21,7 @@ const PAGE_LABELS: Record<string, string> = {
     accounts: "Accounts",
     "project-manager": "Project Manager",
     queue: "Runs",
+    "queue-builder": "Queue Builder",
     "queue-manager": "Runs",
     jobs: "Runs",
     runs: "Runs",
@@ -31,8 +32,10 @@ const PAGE_LABELS: Record<string, string> = {
 
 const ACTIONS_BY_ROUTE: Record<string, TopBarAction> = {
     "/": { label: "Open Runs", href: "/runs" },
-    "/kdp": { label: "New Image Project", href: "/kdp/ideation" },
-    "/video": { label: "New Video", href: "/video/ideation" },
+    "/kdp": { label: "Open Ideation Hub", href: "/ideation?mode=image" },
+    "/video": { label: "Open Ideation Hub", href: "/ideation?mode=video" },
+    "/ideation": { label: "Open Project Manager", href: "/project-manager" },
+    "/curation": { label: "Open Project Manager", href: "/project-manager" },
     "/audio": { label: "Open TTS", href: "/audio/kokoro" },
     "/scraper": { label: "Open Downloads", href: "/scraper/downloads" },
     "/project-manager": { label: "Open Runs", href: "/runs" },
@@ -41,6 +44,7 @@ const ACTIONS_BY_ROUTE: Record<string, TopBarAction> = {
     "/jobs": { label: "Open Runs", href: "/runs?tab=scheduled" },
     "/runs": { label: "View Published", href: "/published" },
     "/publisher": { label: "View Accounts", href: "/accounts" },
+    "/queue-builder": { label: "View Accounts", href: "/accounts" },
     "/published": { label: "Back to Runs", href: "/runs" },
     "/accounts": { label: "Open Settings", href: "/settings" },
     "/settings": { label: "Open Logs", href: "/logs" },

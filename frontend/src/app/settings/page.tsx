@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { settingsApi, PromptTemplate, LooperPreset, getApiBase, DEFAULT_API_BASE_URL } from "@/lib/api";
+import { settingsApi, PromptTemplate, LooperPreset, TelegramSettings, getApiBase, DEFAULT_API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,7 @@ import {
     VolumeX,
     Zap,
     Monitor,
+    Send,
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -157,6 +159,13 @@ export default function SettingsPage() {
     const [apiBaseInput, setApiBaseInput] = useState("");
     const [apiHealth, setApiHealth] = useState<"idle" | "checking" | "ok" | "error">("idle");
     const [apiHealthMessage, setApiHealthMessage] = useState("");
+    const [telegramEnabled, setTelegramEnabled] = useState(false);
+    const [telegramBotTokenInput, setTelegramBotTokenInput] = useState("");
+    const [telegramChatIdInput, setTelegramChatIdInput] = useState("");
+    const [telegramStatus, setTelegramStatus] = useState<TelegramSettings | null>(null);
+    const [isSavingTelegram, setIsSavingTelegram] = useState(false);
+    const [telegramSaved, setTelegramSaved] = useState(false);
+    const [isTestingTelegram, setIsTestingTelegram] = useState(false);
 
     useEffect(() => {
         loadTemplates();
@@ -166,6 +175,7 @@ export default function SettingsPage() {
         loadOpenaiKeyStatus();
         loadGeminiKeyStatus();
         loadAzureOpenaiStatus();
+        loadTelegramStatus();
         try {
             const currentBase = getApiBase();
             setApiBaseInput(currentBase);
@@ -252,6 +262,17 @@ export default function SettingsPage() {
         }
     };
 
+    const loadTelegramStatus = async () => {
+        try {
+            const res = await settingsApi.getTelegramSettings();
+            setTelegramStatus(res);
+            setTelegramEnabled(Boolean(res.enabled));
+            setTelegramChatIdInput(res.chat_id || "");
+        } catch (e) {
+            console.error("Failed to load Telegram settings", e);
+        }
+    };
+
     const handleSaveGroqKey = async () => {
         if (!groqKeyInput.trim()) return;
         setIsSavingGroqKey(true);
@@ -263,7 +284,7 @@ export default function SettingsPage() {
             setTimeout(() => setGroqSaved(false), 2000);
         } catch (e) {
             console.error("Failed to save Groq key", e);
-            alert(e instanceof Error ? e.message : "Failed to save Groq key");
+            toast.error(e instanceof Error ? e.message : "Failed to save Groq key");
         } finally {
             setIsSavingGroqKey(false);
         }
@@ -280,7 +301,7 @@ export default function SettingsPage() {
             setTimeout(() => setOpenaiSaved(false), 2000);
         } catch (e) {
             console.error("Failed to save OpenAI key", e);
-            alert(e instanceof Error ? e.message : "Failed to save OpenAI key");
+            toast.error(e instanceof Error ? e.message : "Failed to save OpenAI key");
         } finally {
             setIsSavingOpenaiKey(false);
         }
@@ -297,7 +318,7 @@ export default function SettingsPage() {
             setTimeout(() => setGeminiSaved(false), 2000);
         } catch (e) {
             console.error("Failed to save Gemini key", e);
-            alert(e instanceof Error ? e.message : "Failed to save Gemini key");
+            toast.error(e instanceof Error ? e.message : "Failed to save Gemini key");
         } finally {
             setIsSavingGeminiKey(false);
         }
@@ -319,7 +340,7 @@ export default function SettingsPage() {
             setTimeout(() => setAzureSaved(false), 2000);
         } catch (e) {
             console.error("Failed to save Azure OpenAI settings", e);
-            alert(e instanceof Error ? e.message : "Failed to save Azure OpenAI settings");
+            toast.error(e instanceof Error ? e.message : "Failed to save Azure OpenAI settings");
         } finally {
             setIsSavingAzure(false);
         }
@@ -336,6 +357,42 @@ export default function SettingsPage() {
             setGroqModelSaved(true);
             setTimeout(() => setGroqModelSaved(false), 2000);
         } catch {}
+    };
+
+    const handleSaveTelegram = async () => {
+        setIsSavingTelegram(true);
+        try {
+            const payload: { enabled: boolean; bot_token?: string; chat_id?: string } = {
+                enabled: telegramEnabled,
+                chat_id: telegramChatIdInput.trim(),
+            };
+            if (telegramBotTokenInput.trim()) {
+                payload.bot_token = telegramBotTokenInput.trim();
+            }
+            await settingsApi.setTelegramSettings(payload);
+            setTelegramBotTokenInput("");
+            await loadTelegramStatus();
+            setTelegramSaved(true);
+            setTimeout(() => setTelegramSaved(false), 2000);
+        } catch (e) {
+            console.error("Failed to save Telegram settings", e);
+            toast.error(e instanceof Error ? e.message : "Failed to save Telegram settings");
+        } finally {
+            setIsSavingTelegram(false);
+        }
+    };
+
+    const handleTestTelegram = async () => {
+        setIsTestingTelegram(true);
+        try {
+            await settingsApi.testTelegramSettings("Telegram test message from sparse-kuiper App Settings.");
+            toast.success("Telegram test message sent.");
+        } catch (e) {
+            console.error("Failed to send Telegram test message", e);
+            toast.error(e instanceof Error ? e.message : "Failed to send Telegram test message");
+        } finally {
+            setIsTestingTelegram(false);
+        }
     };
 
     const handleSaveApiBase = () => {
@@ -447,7 +504,7 @@ export default function SettingsPage() {
             await loadTemplates();
         } catch (e) {
             console.error("Failed to save template", e);
-            alert(e instanceof Error ? e.message : "Save failed");
+            toast.error(e instanceof Error ? e.message : "Save failed");
         } finally {
             setIsSaving(false);
         }
@@ -497,7 +554,7 @@ export default function SettingsPage() {
             await loadLooperPresets();
         } catch (e) {
             console.error("Failed to save looper preset", e);
-            alert(e instanceof Error ? e.message : "Save failed");
+            toast.error(e instanceof Error ? e.message : "Save failed");
         } finally {
             setIsSavingLooper(false);
         }
@@ -576,7 +633,6 @@ export default function SettingsPage() {
                         <Video className="w-3.5 h-3.5" />
                         Integrations
                     </span>
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">soon</span>
                 </button>
                 <button
                     type="button"
@@ -1580,25 +1636,108 @@ export default function SettingsPage() {
                 {activeSection === "integrations" && (
                     <div className="space-y-6">
                         <Card className="bg-surface border-border">
-                            <CardHeader>
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                    <Video className="w-4 h-4 text-sky-400" />
-                                    Social Integrations
-                                </CardTitle>
-                                <CardDescription className="text-xs">
-                                    Konfigurasi akun YouTube, TikTok, Instagram, dan lainnya akan muncul di sini.
-                                </CardDescription>
+                            <CardHeader className="pb-3 border-b border-border/50">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div className="flex-1">
+                                        <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                            <Send className="w-4 h-4 text-sky-400" />
+                                            Telegram Bot
+                                        </CardTitle>
+                                        <CardDescription className="text-xs mt-1">
+                                            Notifikasi Telegram untuk event backend. Status:{" "}
+                                            <span className="text-foreground">
+                                                {telegramStatus?.enabled ? "enabled" : "disabled"}
+                                            </span>
+                                            . Bot token tersimpan di server.
+                                        </CardDescription>
+                                    </div>
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={handleTestTelegram}
+                                            disabled={
+                                                isTestingTelegram ||
+                                                !telegramStatus?.enabled ||
+                                                !telegramStatus?.has_bot_token ||
+                                                !telegramStatus?.has_chat_id
+                                            }
+                                            className="h-8 text-xs font-semibold w-full sm:w-auto"
+                                        >
+                                            {isTestingTelegram ? "Sending..." : "Send Test"}
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSaveTelegram}
+                                            disabled={isSavingTelegram}
+                                            className={`h-8 text-xs font-semibold transition-all w-full sm:w-auto ${
+                                                telegramSaved ? "bg-emerald-600 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"
+                                            }`}
+                                        >
+                                            {telegramSaved ? (
+                                                <>
+                                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Saved!
+                                                </>
+                                            ) : isSavingTelegram ? (
+                                                "Saving..."
+                                            ) : (
+                                                <>
+                                                    <Save className="w-3.5 h-3.5 mr-1.5" /> Save
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
                             </CardHeader>
-                            <CardContent className="space-y-3 text-xs text-muted-foreground">
-                                <p>
-                                    Saat ini uploader diatur lewat config backend dan halaman Accounts. Section ini
-                                    dipersiapkan untuk:
-                                </p>
-                                <ul className="list-disc pl-4 space-y-1">
-                                    <li>Mapping akun YouTube/TikTok/Instagram per workspace</li>
-                                    <li>Pengaturan default privacy, kategori, dan template caption</li>
-                                    <li>Toggle integrasi per platform dan region</li>
-                                </ul>
+                            <CardContent className="pt-4 space-y-4">
+                                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 px-3 py-2">
+                                    <div className="space-y-0.5">
+                                        <p className="text-xs font-medium text-foreground">Enable Telegram notifications</p>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Dipakai untuk test message dan notifikasi generation task sukses/gagal.
+                                        </p>
+                                    </div>
+                                    <Switch checked={telegramEnabled} onCheckedChange={setTelegramEnabled} />
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-muted-foreground text-xs">Bot token</Label>
+                                        <Input
+                                            type="password"
+                                            value={telegramBotTokenInput}
+                                            onChange={(e) => setTelegramBotTokenInput(e.target.value)}
+                                            placeholder={telegramStatus?.masked_bot_token || "123456789:AA..."}
+                                            className="bg-background border-border text-xs"
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {telegramStatus?.has_bot_token
+                                                ? `Current token: ${telegramStatus.masked_bot_token}`
+                                                : "Belum ada bot token tersimpan."}
+                                        </p>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-muted-foreground text-xs">Chat ID</Label>
+                                        <Input
+                                            value={telegramChatIdInput}
+                                            onChange={(e) => setTelegramChatIdInput(e.target.value)}
+                                            placeholder="123456789 atau -100xxxxxxxxxx"
+                                            className="bg-background border-border text-xs"
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {telegramStatus?.has_chat_id
+                                                ? `Current chat ID: ${telegramStatus.chat_id}`
+                                                : "Belum ada chat ID tersimpan."}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-border bg-background/40 px-3 py-3 text-[11px] text-muted-foreground space-y-1">
+                                    <p>Langkah cepat:</p>
+                                    <p>1. Buat bot lewat BotFather dan ambil bot token.</p>
+                                    <p>2. Kirim pesan ke bot Anda.</p>
+                                    <p>3. Ambil chat ID lalu isi di sini, simpan, lalu klik Send Test.</p>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>

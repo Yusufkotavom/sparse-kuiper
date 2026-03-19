@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wand2, Loader2, Eye, EyeOff, Copy, CheckCheck, FileText } from "lucide-react";
+import { toast } from "sonner";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed visual prompts for AI video generation (like Grok or Sora). Generate exactly {N} unique, non-repeating prompts for a video sequence featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Describe camera movement, lighting, subject action, and environment clearly.`;
 const DEFAULT_PREFIX = "cinematic video, 4k resolution, highly detailed,";
@@ -163,10 +164,10 @@ export default function IdeationPage() {
             await videoApi.createProject(projectName);
             await loadProjects();
             await handleProjectSelect(projectName);
-            alert(`Project ${projectName} created successfully!`);
+            toast.success(`Project ${projectName} created successfully.`);
         } catch (e) {
             console.error("Failed to create project", e);
-            alert("Error creating project. It might already exist.");
+            toast.error("Error creating project. It might already exist.");
         }
     };
 
@@ -190,9 +191,10 @@ export default function IdeationPage() {
                 grok_account_id: grokAccountId,
             });
 
-            alert(`${composedPrompts.length} prompts + project settings saved!`);
+            toast.success(`${composedPrompts.length} prompts + project settings saved.`);
         } catch (e) {
             console.error("Failed to save", e);
+            toast.error(e instanceof Error ? e.message : "Failed to save prompts");
         }
     };
 
@@ -227,10 +229,20 @@ export default function IdeationPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
             <div className="mb-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                    <Wand2 className="w-6 h-6 text-primary" /> Video Ideation
-                </h2>
-                <p className="text-muted-foreground text-sm mt-1">Generate AI-powered visual prompts for Grok Video Generation.</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                            <Wand2 className="w-6 h-6 text-primary" /> Video Prompt Builder
+                        </h2>
+                        <p className="text-muted-foreground text-sm mt-1">Cabang spesifik dari Ideation Hub untuk menulis dan menyimpan prompt batch video.</p>
+                    </div>
+                    <Link
+                        href="/ideation?mode=video"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+                    >
+                        Back to Ideation Hub
+                    </Link>
+                </div>
                 <div className="mt-3 rounded-xl border border-border bg-surface/80 p-2 sm:p-3">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {[

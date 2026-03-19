@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ViewToggle } from "@/components/atoms/ViewToggle";
 import { Download, Upload } from "lucide-react";
 import { subscribeToRealtimeStream, type RealtimeEventRecord } from "@/lib/supabase";
+import { toast } from "sonner";
+import { useSystemUi } from "@/components/system/SystemUiProvider";
 
 // ─── YouTube Connect Modal ────────────────────────────────────────
 function YouTubeConnectModal({ account, onConnected }: { account: Account; onConnected: () => void }) {
@@ -499,6 +501,7 @@ function getPlatformColor(platform: string) {
 
 // ─── Main Page ────────────────────────────────────────────────────
 export default function AccountsPage() {
+    const { confirm } = useSystemUi();
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [search, setSearch] = useState("");
@@ -585,7 +588,7 @@ export default function AccountsPage() {
             setIsAddModalOpen(false);
             setNewAccount({ name: "", platform: "tiktok", auth_method: "playwright", api_key: "", api_secret: "", tags: "", notes: "", browser_type: "chromium", lightweight_mode: false, proxy: "", user_agent: "" });
             loadAccounts();
-        } catch { alert("Failed to add account."); }
+        } catch { toast.error("Failed to add account."); }
         finally { setIsSaving(false); }
     };
 
@@ -597,7 +600,7 @@ export default function AccountsPage() {
             setIsEditModalOpen(false);
             setCurrentEditingAccount(null);
             loadAccounts();
-        } catch { alert("Failed to update account."); }
+        } catch { toast.error("Failed to update account."); }
         finally { setIsSaving(false); }
     };
 
@@ -607,41 +610,59 @@ export default function AccountsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Delete this account and its session data?")) return;
+        const confirmed = await confirm({
+            title: "Delete this account?",
+            description: "This will remove the account entry and its saved session data.",
+            confirmLabel: "Delete",
+            destructive: true,
+        });
+        if (!confirmed) return;
         setActionLoading(`delete-${id}`);
         try { await accountsApi.deleteAccount(id); loadAccounts(); }
-        catch { alert("Failed to delete account."); }
+        catch { toast.error("Failed to delete account."); }
         finally { setActionLoading(null); }
     };
 
     const handleLogin = async (id: string, method: string) => {
-        if (method !== "playwright") { alert("API login is handled via OAuth connect."); return; }
+        if (method !== "playwright") { toast.info("API login is handled via OAuth connect."); return; }
         setActionLoading(`login-${id}`);
-        try { const res = await accountsApi.triggerLogin(id); alert(res.message); }
-        catch { alert("Failed to launch login browser."); }
+        try { const res = await accountsApi.triggerLogin(id); toast.success(res.message); }
+        catch { toast.error("Failed to launch login browser."); }
         finally { setActionLoading(null); }
     };
 
     const handleLaunchBrowser = async (id: string) => {
         setActionLoading(`launch-${id}`);
-        try { const res = await accountsApi.launchPlaywrightManual(id); alert(res.message); }
-        catch { alert("Failed to launch manual browser."); }
+        try { const res = await accountsApi.launchPlaywrightManual(id); toast.success(res.message); }
+        catch { toast.error("Failed to launch manual browser."); }
         finally { setActionLoading(null); }
     };
 
     const handleDisconnectYoutube = async (id: string) => {
-        if (!confirm("Disconnect this YouTube channel? You'll need to re-authorize.")) return;
+        const confirmed = await confirm({
+            title: "Disconnect YouTube channel?",
+            description: "You'll need to re-authorize this channel before it can be used again.",
+            confirmLabel: "Disconnect",
+            destructive: true,
+        });
+        if (!confirmed) return;
         setActionLoading(`yt-disconnect-${id}`);
         try { await accountsApi.disconnectYoutube(id); loadAccounts(); }
-        catch { alert("Failed to disconnect."); }
+        catch { toast.error("Failed to disconnect."); }
         finally { setActionLoading(null); }
     };
 
     const handleDisconnectFacebook = async (id: string) => {
-        if (!confirm("Disconnect this Facebook Page? You'll need to re-authorize.")) return;
+        const confirmed = await confirm({
+            title: "Disconnect Facebook Page?",
+            description: "You'll need to re-authorize this page before it can be used again.",
+            confirmLabel: "Disconnect",
+            destructive: true,
+        });
+        if (!confirmed) return;
         setActionLoading(`fb-disconnect-${id}`);
         try { await accountsApi.disconnectFacebook(id); loadAccounts(); }
-        catch { alert("Failed to disconnect."); }
+        catch { toast.error("Failed to disconnect."); }
         finally { setActionLoading(null); }
     };
 

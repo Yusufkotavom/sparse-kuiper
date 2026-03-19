@@ -24,6 +24,8 @@ import {
     Table2,
     LayoutGrid,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useSystemUi } from "@/components/system/SystemUiProvider";
 
 const getStaticBase = () => `${getApiBase()}/video_projects_static/`;
 const LAST_PROJECT_KEY = "video-curation-last-project";
@@ -38,6 +40,7 @@ const GENERATION_STEPS = [
 type PromptViewMode = "table" | "card";
 
 export default function VideoCurationPage() {
+    const { confirm } = useSystemUi();
     const [projects, setProjects] = useState<string[]>([]);
     const [selectedProject, setSelectedProject] = useState<string | null>(null);
     const [videos, setVideos] = useState<{ raw: string[]; final: string[]; archive: string[] }>({ raw: [], final: [], archive: [] });
@@ -227,14 +230,19 @@ export default function VideoCurationPage() {
 
     const handleDeleteVideo = async (filename: string) => {
         if (!selectedProject) return;
-        const yes = window.confirm(`Hapus video "${filename}"?`);
+        const yes = await confirm({
+            title: `Hapus video "${filename}"?`,
+            description: "Video akan dihapus dari project ini.",
+            confirmLabel: "Hapus",
+            destructive: true,
+        });
         if (!yes) return;
         setIsDeletingVideo(filename);
         try {
             await videoApi.bulkDeleteProjectVideos(selectedProject, [filename]);
             await loadProjectVideos(selectedProject);
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Gagal menghapus video");
+            toast.error(e instanceof Error ? e.message : "Gagal menghapus video");
         } finally {
             setIsDeletingVideo(null);
         }
@@ -242,7 +250,12 @@ export default function VideoCurationPage() {
 
     const handleDeleteProject = async () => {
         if (!selectedProject) return;
-        const yes = window.confirm(`Project "${selectedProject}" akan dihapus permanen. Lanjutkan?`);
+        const yes = await confirm({
+            title: `Hapus project "${selectedProject}"?`,
+            description: "Project akan dihapus permanen beserta data terkait.",
+            confirmLabel: "Hapus project",
+            destructive: true,
+        });
         if (!yes) return;
         setIsDeletingProject(true);
         try {
@@ -258,7 +271,7 @@ export default function VideoCurationPage() {
             setVideos({ raw: [], final: [], archive: [] });
             await loadProjects();
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Gagal menghapus project");
+            toast.error(e instanceof Error ? e.message : "Gagal menghapus project");
         } finally {
             setIsDeletingProject(false);
         }
@@ -284,11 +297,11 @@ export default function VideoCurationPage() {
         };
         try {
             const res = await videoApi.triggerBot(selectedProject, useReference, headlessMode);
-            alert(res.message);
+            toast.success(res.message);
             setIsGenerationMonitoring(true);
         } catch (e) {
             console.error("Failed to launch Grok bot", e);
-            alert(`Error: ${e instanceof Error ? e.message : "Failed to launch bot"}`);
+            toast.error(e instanceof Error ? e.message : "Failed to launch bot");
             setBotProgress(0);
             setGenerationStep(0);
             setGenerationMessage("Gagal memulai generate.");
@@ -310,9 +323,9 @@ export default function VideoCurationPage() {
             await videoApi.savePrompts(selectedProject, cleaned);
             setSavedPrompts(cleaned);
             setEditMode(false);
-            alert(`Saved ${cleaned.length} prompts`);
+            toast.success(`Saved ${cleaned.length} prompts`);
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Failed to save prompts");
+            toast.error(e instanceof Error ? e.message : "Failed to save prompts");
         }
     };
 
@@ -342,12 +355,22 @@ export default function VideoCurationPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
             <div className="mb-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                    <VideoIcon className="w-6 h-6 text-primary" /> Video Curation
-                </h2>
-                <p className="text-muted-foreground text-sm mt-1">
-                    Kelola project, edit prompt, jalankan bot, lalu kurasi hasil video.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                            <VideoIcon className="w-6 h-6 text-primary" /> Video Curation Workspace
+                        </h2>
+                        <p className="text-muted-foreground text-sm mt-1">
+                            Cabang spesifik dari Curation Hub untuk review prompt, monitor generation, dan memilih asset final video.
+                        </p>
+                    </div>
+                    <Link
+                        href="/curation?mode=video"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+                    >
+                        Back to Curation Hub
+                    </Link>
+                </div>
                 <div className="mt-3 rounded-xl border border-border bg-surface/80 p-2 sm:p-3">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {[

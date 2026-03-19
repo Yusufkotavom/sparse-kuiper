@@ -18,7 +18,20 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <Toaster position="top-right" richColors closeButton />
+        <Toaster
+          closeButton
+          position="top-right"
+          toastOptions={{
+            classNames: {
+              toast: "system-toast",
+              title: "system-toast-title",
+              description: "system-toast-description",
+              actionButton: "system-toast-action",
+              cancelButton: "system-toast-cancel",
+              closeButton: "system-toast-close",
+            },
+          }}
+        />
         <Providers>
           <TooltipProvider>
             <AppShell>{children}</AppShell>

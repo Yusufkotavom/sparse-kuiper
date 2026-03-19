@@ -11,10 +11,12 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbSeparator, Breadc
 import { Checkbox } from "@/components/ui/checkbox"
 import { FolderPlus, Upload as UploadIcon, ArrowRight, CheckSquare, XCircle, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { useSystemUi } from "@/components/system/SystemUiProvider"
 
 type DriveFile = { id: string; name: string; mimeType: string; parents?: string[] }
 
 export default function DriveExplorerPage() {
+  const { prompt } = useSystemUi()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<string>("")
   const [files, setFiles] = useState<DriveFile[]>([])
@@ -187,10 +189,15 @@ export default function DriveExplorerPage() {
   async function importSelectedToVideo() {
     const ids = getSelectedIds()
     if (!selectedAccountId || ids.length === 0) {
-      alert("Pilih minimal satu file")
+      toast.error("Pilih minimal satu file")
       return
     }
-    const name = prompt("Nama project video?")
+    const name = await prompt({
+      title: "Import ke Video Project",
+      description: "Masukkan nama project video tujuan untuk file yang dipilih.",
+      placeholder: "misal: promo-short-01",
+      submitLabel: "Import",
+    })
     if (!name) return
     setImporting(true)
     setImportProgress(5)
@@ -211,10 +218,15 @@ export default function DriveExplorerPage() {
   async function importSelectedToKdp() {
     const ids = getSelectedIds()
     if (!selectedAccountId || ids.length === 0) {
-      alert("Pilih minimal satu file")
+      toast.error("Pilih minimal satu file")
       return
     }
-    const name = prompt("Nama project KDP?")
+    const name = await prompt({
+      title: "Import ke KDP Project",
+      description: "Masukkan nama project KDP tujuan untuk file yang dipilih.",
+      placeholder: "misal: animal-coloring-book",
+      submitLabel: "Import",
+    })
     if (!name) return
     setImporting(true)
     setImportProgress(5)

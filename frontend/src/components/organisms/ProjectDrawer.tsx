@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { X, Save, Send, ExternalLink } from "lucide-react";
-import { publisherApi } from "@/lib/api";
+import { queueBuilderApi } from "@/lib/api";
 
 interface ProjectDrawerProps {
     open: boolean;
@@ -27,7 +27,7 @@ export function ProjectDrawer({ open, onClose, projectType, file, titleHint, pre
         let cancelled = false;
         (async () => {
             try {
-                const db = await publisherApi.getAssetMetadata(projectType, file);
+                const db = await queueBuilderApi.getAssetMetadata(projectType, file);
                 if (!cancelled) {
                     setTitle(db.title || "");
                     setDescription(db.description || "");
@@ -48,7 +48,7 @@ export function ProjectDrawer({ open, onClose, projectType, file, titleHint, pre
             const hasAny = (title && title.trim()) || (description && description.trim()) || (tags && tags.trim());
             if (!hasAny) return;
             setSaving(true);
-            publisherApi.setAssetMetadata(projectType, file, { title, description, tags })
+            queueBuilderApi.setAssetMetadata(projectType, file, { title, description, tags })
                 .finally(() => setSaving(false));
         }, 800);
         return () => clearTimeout(t);
@@ -128,7 +128,7 @@ export function ProjectDrawer({ open, onClose, projectType, file, titleHint, pre
                     <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => {
                             setSaving(true);
-                            publisherApi.setAssetMetadata(projectType, file, { title, description, tags })
+                            queueBuilderApi.setAssetMetadata(projectType, file, { title, description, tags })
                                 .finally(() => setSaving(false));
                         }}>
                             <Save className="mr-1.5 h-4 w-4" /> Save
@@ -138,7 +138,7 @@ export function ProjectDrawer({ open, onClose, projectType, file, titleHint, pre
                                 if (!title) return;
                                 setEnqueueing(true);
                                 try {
-                                    await publisherApi.setAssetMetadata(projectType, file, { title, description, tags });
+                                    await queueBuilderApi.setAssetMetadata(projectType, file, { title, description, tags });
                                     await onEnqueue();
                                 } finally {
                                     setEnqueueing(false);

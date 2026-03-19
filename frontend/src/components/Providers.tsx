@@ -2,13 +2,16 @@
 
 import { ThemeProvider } from "@/context/ThemeContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { SystemUiProvider } from "@/components/system/SystemUiProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider>
-            <SidebarProvider>
-                {children}
-            </SidebarProvider>
+            <SystemUiProvider>
+                <SidebarProvider>
+                    {children}
+                </SidebarProvider>
+            </SystemUiProvider>
         </ThemeProvider>
     );
 }

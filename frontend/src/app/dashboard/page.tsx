@@ -104,20 +104,20 @@ export default function DashboardPage() {
             <div className="rounded-lg border border-border bg-background/80 p-3">
               <p className="font-semibold text-foreground">1. Buat project</p>
               <p className="mt-1 text-muted-foreground">
-                Mulai dari Creator Studio untuk video, atau Ideation untuk Image Creation.
+                Mulai dari Ideation Hub untuk memilih flow video atau image, lalu teruskan ke generator yang paling cocok.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link
-                  href="/video/creator-studio"
+                  href="/ideation?mode=video"
                   className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
                 >
-                  New Video Project
+                  Start Video Flow
                 </Link>
                 <Link
-                  href="/kdp/ideation"
+                  href="/ideation?mode=image"
                   className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
                 >
-                  New Image Project
+                  Start Image Flow
                 </Link>
               </div>
             </div>
@@ -142,7 +142,7 @@ export default function DashboardPage() {
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Link
-                  href="/publisher"
+                  href="/queue-builder"
                   className="rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground"
                 >
                   Buka Queue Builder

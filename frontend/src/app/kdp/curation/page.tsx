@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCheck, Image as ImageIcon, Send, FileText, Wand2, Copy, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import { useSystemUi } from "@/components/system/SystemUiProvider";
 
 import { getApiBase } from "@/lib/api";
 const getStaticBase = () => `${getApiBase()}/projects_static/`;
 
 export default function CurationPage() {
+    const { confirm } = useSystemUi();
     const [projects, setProjects] = useState<string[]>([]);
     const [selectedProject, setSelectedProject] = useState<string | null>(null);
     const [images, setImages] = useState<{ raw: string[]; final: string[] }>({ raw: [], final: [] });
@@ -75,7 +78,13 @@ export default function CurationPage() {
 
     const handleDeleteRaw = async (filename: string) => {
         if (!selectedProject) return;
-        if (!confirm(`Hapus ${filename}?`)) return;
+        const confirmed = await confirm({
+            title: `Hapus ${filename}?`,
+            description: "File raw akan dihapus dari project ini.",
+            confirmLabel: "Hapus",
+            destructive: true,
+        });
+        if (!confirmed) return;
         try {
             await kdpApi.bulkDeleteProjectImages(selectedProject, [filename]);
             loadProjectImages(selectedProject);
@@ -99,10 +108,10 @@ export default function CurationPage() {
         setIsBotLoading(true);
         try {
             const res = await kdpApi.triggerBot(selectedProject);
-            alert(res.message);
+            toast.success(res.message);
         } catch (e) {
             console.error("Failed to launch bot", e);
-            alert(`Error: ${e instanceof Error ? e.message : "Failed to launch bot"}`);
+            toast.error(e instanceof Error ? e.message : "Failed to launch bot");
         } finally {
             setIsBotLoading(false);
         }
@@ -113,9 +122,9 @@ export default function CurationPage() {
         setIsLoading(true);
         try {
             await kdpApi.createPdf({ project_name: selectedProject, image_paths: images.final });
-            alert("PDF Generated Successfully!");
+            toast.success("PDF generated successfully.");
         } catch (e) {
-            alert(e instanceof Error ? e.message : "PDF creation failed");
+            toast.error(e instanceof Error ? e.message : "PDF creation failed");
         } finally {
             setIsLoading(false);
         }
@@ -134,9 +143,9 @@ export default function CurationPage() {
             await kdpApi.savePrompts(selectedProject, cleaned);
             setSavedPrompts(cleaned);
             setEditMode(false);
-            alert(`Saved ${cleaned.length} prompts`);
+            toast.success(`Saved ${cleaned.length} prompts`);
         } catch (e) {
-            alert(e instanceof Error ? e.message : "Failed to save prompts");
+            toast.error(e instanceof Error ? e.message : "Failed to save prompts");
         }
     };
 
@@ -164,10 +173,20 @@ export default function CurationPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
             <div className="mb-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                    <FileText className="w-6 h-6 text-primary" /> Image Curation
-                </h2>
-                <p className="text-muted-foreground text-sm mt-1">Select a project, launch the bot, curate images, and compile PDFs.</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                            <FileText className="w-6 h-6 text-primary" /> Image Curation Workspace
+                        </h2>
+                        <p className="text-muted-foreground text-sm mt-1">Cabang spesifik dari Curation Hub untuk review image, final selection, dan output PDF.</p>
+                    </div>
+                    <Link
+                        href="/curation?mode=image"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+                    >
+                        Back to Curation Hub
+                    </Link>
+                </div>
                 <div className="mt-3 rounded-xl border border-border bg-surface/80 p-2 sm:p-3">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {[

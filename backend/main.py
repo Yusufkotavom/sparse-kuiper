@@ -39,6 +39,7 @@ async def startup_event():
     logger.info("[Startup] Initializing database...")
     from backend.core.database import create_all_tables, SessionLocal
     from backend.core.migrations import run_migrations
+    from backend.services.publisher_dispatcher import start_publisher_dispatcher
 
     # 1. Create tables (idempotent — safe to run every time)
     create_all_tables()
@@ -50,6 +51,15 @@ async def startup_event():
         run_migrations(db)
     finally:
         db.close()
+
+    start_publisher_dispatcher()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    from backend.services.publisher_dispatcher import stop_publisher_dispatcher
+
+    stop_publisher_dispatcher()
 
 
 @app.get("/")
@@ -69,6 +79,7 @@ from backend.routers import scraper
 from backend.routers import scraper_projects
 from backend.routers import services
 from backend.routers import looper
+from backend.routers import concat
 from backend.routers import drive
 from backend.routers import backup
 from backend.routers import internal_playwright
@@ -85,6 +96,7 @@ app.include_router(scraper.router, prefix="/api/v1/scraper", tags=["scraper"])
 app.include_router(scraper_projects.router, prefix="/api/v1/scraper-projects", tags=["scraper_projects"])
 app.include_router(services.router)
 app.include_router(looper.router)
+app.include_router(concat.router)
 app.include_router(drive.router)
 app.include_router(backup.router)
 app.include_router(internal_playwright.router)

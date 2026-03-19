@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
-import { getApiBase, kdpApi, publisherApi, videoApi } from "@/lib/api";
+import { getApiBase, kdpApi, queueBuilderApi, videoApi } from "@/lib/api";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ProjectDrawer } from "@/components/organisms/ProjectDrawer";
@@ -42,6 +43,7 @@ export function LazyProjectManagerCard({
   onQueued,
   prefetchedMeta,
 }: ProjectManagerCardProps) {
+  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const fileName = file.split("/").pop() || file;
@@ -86,6 +88,8 @@ export function LazyProjectManagerCard({
     if (onQueued && onQueued !== onDeleted) await onQueued();
   };
 
+  const queueBuilderHref = useMemo(() => `/queue-builder?file=${encodeURIComponent(fileName)}`, [fileName]);
+
   const runAction = async (key: string, action: () => Promise<void>, successMessage: string) => {
     setBusyKey(key);
     try {
@@ -104,14 +108,14 @@ export function LazyProjectManagerCard({
     await runAction(
       "generate",
       async () => {
-        const gen = await publisherApi.generateAssetMetadata({
+        const gen = await queueBuilderApi.generateAssetMetadata({
           project_type: projectType,
           file,
           title: prefetchedMeta?.title || queueStatus?.metadata?.title || "",
           description: prefetchedMeta?.description || queueStatus?.metadata?.description || "",
           tags: prefetchedMeta?.tags || queueStatus?.metadata?.tags || "",
         }).catch(() => ({ title: fileName.replace(/\.[^\.]+$/, ""), description: `Asset from project ${projectName}`, tags: "#content" }));
-        await publisherApi.setAssetMetadata(projectType, file, { title: gen.title, description: gen.description, tags: gen.tags });
+        await queueBuilderApi.setAssetMetadata(projectType, file, { title: gen.title, description: gen.description, tags: gen.tags });
       },
       "Metadata generated"
     );
@@ -121,8 +125,8 @@ export function LazyProjectManagerCard({
     await runAction(
       "enqueue",
       async () => {
-        const meta = await publisherApi.getAssetMetadata(projectType, file).catch(() => ({ title: "", description: "", tags: "" }));
-        await publisherApi.addToQueue({
+        const meta = await queueBuilderApi.getAssetMetadata(projectType, file).catch(() => ({ title: "", description: "", tags: "" }));
+        await queueBuilderApi.addToQueue({
           project_type: projectType,
           relative_path: file,
           title: meta.title || fileName.replace(/\.[^\.]+$/, ""),
@@ -132,6 +136,7 @@ export function LazyProjectManagerCard({
       },
       "Added to queue"
     );
+    router.push(queueBuilderHref);
   };
 
   const moveAsset = async (targetStage: "raw" | "final" | "archive") => {
@@ -178,7 +183,7 @@ export function LazyProjectManagerCard({
         </DropdownMenuContent>
       </DropdownMenu>
       {projectType === "video" && queueStatus?.status ? (
-        <Link href={`/publisher?file=${encodeURIComponent(fileName)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+        <Link href={queueBuilderHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
           Open Queue Builder
         </Link>
       ) : null}

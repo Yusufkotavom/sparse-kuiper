@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from sqlalchemy import inspect, text
 
 from backend.core.logger import logger
 
@@ -232,6 +233,7 @@ def seed_from_legacy_sqlite(db):
 
 
 def run_migrations(db):
+    ensure_upload_queue_runtime_columns(db)
     if not _env_bool("ENABLE_LEGACY_IMPORTS", "0"):
         logger.info("[Migration] Legacy imports disabled. Set ENABLE_LEGACY_IMPORTS=1 to run bootstrap imports.")
         return
@@ -239,3 +241,30 @@ def run_migrations(db):
     seed_accounts_from_json(db)
     seed_upload_queue_from_json(db)
     logger.info("[Migration] Migration check complete.")
+
+
+def ensure_upload_queue_runtime_columns(db):
+    try:
+        inspector = inspect(db.bind)
+        columns = {column["name"] for column in inspector.get_columns("upload_queue")}
+    except Exception as e:
+        logger.warning(f"[Migration] Could not inspect upload_queue columns: {e}")
+        return
+
+    statements: list[str] = []
+    if "next_retry_at" not in columns:
+        statements.append("ALTER TABLE upload_queue ADD COLUMN next_retry_at TIMESTAMPTZ NULL")
+    if "lease_expires_at" not in columns:
+        statements.append("ALTER TABLE upload_queue ADD COLUMN lease_expires_at TIMESTAMPTZ NULL")
+
+    if not statements:
+        return
+
+    try:
+        for statement in statements:
+            db.execute(text(statement))
+        db.commit()
+        logger.info("[Migration] Added runtime queue columns: next_retry_at / lease_expires_at")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[Migration] Failed to add runtime queue columns: {e}")

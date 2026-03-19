@@ -15,6 +15,7 @@ from backend.core.json_utils import ensure_json_value
 from backend.core.logger import logger
 from backend.core.realtime import publish_realtime_event
 from backend.models.generation_task import GenerationTask
+from backend.services.telegram_notifier import send_telegram_message
 
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
@@ -32,6 +33,25 @@ def _extract_result_url(output: Any) -> Optional[str]:
         if isinstance(first, str):
             return first
     return None
+
+
+def _notify_generation_status(task: GenerationTask) -> None:
+    if task.status not in {"succeeded", "failed"}:
+        return
+
+    lines = [
+        f"Generation {task.status.upper()}",
+        f"Task ID: {task.id}",
+        f"Type: {task.task_type}",
+        f"Provider: {task.provider}",
+    ]
+
+    if task.result_url:
+        lines.append(f"Result: {task.result_url}")
+    if task.error:
+        lines.append(f"Error: {task.error}")
+
+    send_telegram_message("\n".join(lines))
 
 
 def create_generation_task(db, task_type: str, provider: str, prompt: str, input_payload: Dict[str, Any]) -> GenerationTask:
@@ -156,6 +176,7 @@ def run_generation_task(task_id: str):
             entity_id=task.id,
             payload={"id": task.id, "status": task.status, "result_url": task.result_url, "error": task.error},
         )
+        _notify_generation_status(task)
         db.commit()
 
     except Exception as exc:
@@ -173,6 +194,7 @@ def run_generation_task(task_id: str):
                 entity_id=task.id,
                 payload={"id": task.id, "status": task.status, "error": task.error},
             )
+            _notify_generation_status(task)
             db.commit()
     finally:
         db.close()

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wand2, Loader2, Eye, EyeOff, Copy, CheckCheck } from "lucide-react";
+import { toast } from "sonner";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed Stable Diffusion / Midjourney prompts for KDP coloring books. Generate exactly {N} unique, non-repeating prompts for a coloring book featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Each prompt should describe a single, clear scene or character pose.`;
 const DEFAULT_PREFIX = "simple line art coloring page,";
@@ -162,10 +163,10 @@ export default function IdeationPage() {
             await kdpApi.createProject(projectName);
             await loadProjects();
             await handleProjectSelect(projectName);
-            alert(`Project ${projectName} created successfully!`);
+            toast.success(`Project ${projectName} created successfully.`);
         } catch (e) {
             console.error("Failed to create project", e);
-            alert("Error creating project. It might already exist.");
+            toast.error("Error creating project. It might already exist.");
         }
     };
 
@@ -189,9 +190,10 @@ export default function IdeationPage() {
                 whisk_account_id: whiskAccountId,
             });
 
-            alert(`${composedPrompts.length} prompts + project settings saved!`);
+            toast.success(`${composedPrompts.length} prompts + project settings saved.`);
         } catch (e) {
             console.error("Failed to save", e);
+            toast.error(e instanceof Error ? e.message : "Failed to save prompts");
         }
     };
 
@@ -226,10 +228,20 @@ export default function IdeationPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-[var(--gap-base)]">
             <div className="mb-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-                    <Wand2 className="w-6 h-6 text-primary" /> Image Ideation
-                </h2>
-                <p className="text-muted-foreground text-sm mt-1">Generate AI-powered visual prompts for Image Generation (KDP/Social Media).</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                            <Wand2 className="w-6 h-6 text-primary" /> Image Prompt Builder
+                        </h2>
+                        <p className="text-muted-foreground text-sm mt-1">Cabang spesifik dari Ideation Hub untuk menyiapkan prompt image yang nanti bisa dipakai banyak generator.</p>
+                    </div>
+                    <Link
+                        href="/ideation?mode=image"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+                    >
+                        Back to Ideation Hub
+                    </Link>
+                </div>
                 <div className="mt-3 rounded-xl border border-border bg-surface/80 p-2 sm:p-3">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {[

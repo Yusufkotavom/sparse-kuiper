@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, Download, Search, Globe, Play, CheckSquare, Square, Trash2, FolderPlus, FolderOpen, Terminal as TerminalIcon } from "lucide-react";
+import { toast } from "sonner";
 
 interface ScrapedVideo {
     title: string;
@@ -158,11 +159,11 @@ export default function ScraperPage() {
                 setSelectedUrls(new Set()); // reset selection
                 await saveScrapedData(newVids, parsedChannel);
             } else {
-                alert(`Error: ${data.detail || data.message}`);
+                toast.error(data.detail || data.message || "Failed to scrape");
             }
         } catch (e) {
             console.error(e);
-            alert("Failed to connect to backend");
+            toast.error("Failed to connect to backend");
         } finally {
             setIsScraping(false);
         }
@@ -194,9 +195,9 @@ export default function ScraperPage() {
                 })
             });
             if (res.ok) {
-                alert(`Started downloading ${selectedUrls.size} videos in background to video_projects/${activeProject || "Scraped_Downloads"}. Monitor the backend terminal for logs.`);
+                toast.success(`Started downloading ${selectedUrls.size} videos to video_projects/${activeProject || "Scraped_Downloads"}.`);
             } else {
-                alert("Failed to start batch download");
+                toast.error("Failed to start batch download");
             }
         } catch (e) {
             console.error(e);
@@ -219,10 +220,10 @@ export default function ScraperPage() {
                 })
             });
             if (res.ok) {
-                 alert(`Started downloading video in background to video_projects/${activeProject || "Scraped_Downloads"}.`);
+                 toast.success(`Started downloading video to video_projects/${activeProject || "Scraped_Downloads"}.`);
                  setDirectUrl("");
             } else {
-                 alert("Failed to start download");
+                 toast.error("Failed to start download");
             }
         } catch (e) {
              console.error(e);

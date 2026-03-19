@@ -2,21 +2,24 @@
  
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { videoApi, kdpApi, publisherApi } from "@/lib/api";
+import { videoApi, kdpApi, queueBuilderApi } from "@/lib/api";
 import { PageHeader } from "@/components/atoms/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { ViewToggle } from "@/components/atoms/ViewToggle";
 import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
-import { FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import { FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyProjectManagerCard, type ProjectType } from "@/components/organisms/ProjectManagerCard";
+import { ProjectManualUploadDialog } from "@/components/organisms/ProjectManualUploadDialog";
 import { getSupabaseClient } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import type { QueueItem } from "@/lib/api";
+import { useSystemUi } from "@/components/system/SystemUiProvider";
+import type { ProjectVideoUploadResponse, QueueItem } from "@/lib/api";
 
 export default function ProjectOverviewPage() {
+  const { confirm } = useSystemUi();
   const params = useParams();
   const router = useRouter();
   const name = typeof params?.project === "string" ? params.project : Array.isArray(params?.project) ? params.project[0] : "";
@@ -33,6 +36,7 @@ export default function ProjectOverviewPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [recentRuns, setRecentRuns] = useState<Array<{ id: string; title: string; status: string; source: "queue" | "job"; at?: string | null }>>([]);
   const [deletingProject, setDeletingProject] = useState(false);
+  const [manualUploadOpen, setManualUploadOpen] = useState(false);
 
   const allFiles = useMemo(() => [...items.final, ...items.raw, ...(items.queue || []), ...(items.archive || [])], [items]);
   const filtered = useMemo(() => {
@@ -47,6 +51,12 @@ export default function ProjectOverviewPage() {
   const rawCount = items.raw.length;
   const queueCount = (items.queue || []).length;
   const archiveCount = (items.archive || []).length;
+  const buildQueueBuilderHref = useCallback((files: string[]) => {
+    const params = new URLSearchParams();
+    files.forEach((file) => params.append("file", file.split("/").pop() || file));
+    const query = params.toString();
+    return query ? `/queue-builder?${query}` : "/queue-builder";
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,8 +66,8 @@ export default function ProjectOverviewPage() {
         projectType === "video"
           ? videoApi.getPrompts(name).catch(() => ({ prompts: [] }))
           : kdpApi.getPrompts(name).catch(() => ({ prompts: [] })),
-        publisherApi.getQueue().catch(() => ({ queue: [] })),
-        publisherApi.getJobs().catch(() => ({ jobs: [] })),
+        queueBuilderApi.getQueue().catch(() => ({ queue: [] })),
+        queueBuilderApi.getJobs().catch(() => ({ jobs: [] })),
       ]);
       let queueFiles: string[] = [];
       const statusMap: Record<string, QueueItem> = {};
@@ -122,7 +132,7 @@ export default function ProjectOverviewPage() {
         ...(nextItems.archive || []),
       ];
       if (metaFiles.length > 0) {
-        const batch = await publisherApi.getAssetsMetadataBatch(projectType, metaFiles).catch(() => ({ items: [] }));
+        const batch = await queueBuilderApi.getAssetsMetadataBatch(projectType, metaFiles).catch(() => ({ items: [] }));
         const map: Record<string, { title: string; description: string; tags: string }> = {};
         (batch.items || []).forEach((it) => {
           map[it.file] = { title: it.title || "", description: it.description || "", tags: it.tags || "" };
@@ -167,15 +177,20 @@ export default function ProjectOverviewPage() {
   }, [name, listDensity]);
 
   const goToIdeation = () => {
-    router.push(projectType === "video" ? `/video/ideation?project=${encodeURIComponent(name)}` : `/kdp/ideation?project=${encodeURIComponent(name)}`);
+    router.push(projectType === "video" ? `/ideation?mode=video&project=${encodeURIComponent(name)}` : `/ideation?mode=image&project=${encodeURIComponent(name)}`);
   };
 
   const goToCuration = () => {
-    router.push(projectType === "video" ? `/video/curation?project=${encodeURIComponent(name)}` : `/kdp/curation?project=${encodeURIComponent(name)}`);
+    router.push(projectType === "video" ? `/curation?mode=video&project=${encodeURIComponent(name)}` : `/curation?mode=image&project=${encodeURIComponent(name)}`);
   };
 
   const handleDeleteProject = async () => {
-    const confirmed = window.confirm(`Delete project "${name}"?\n\nAll related assets for this workflow type will be removed.`);
+    const confirmed = await confirm({
+      title: `Delete project "${name}"?`,
+      description: "All related assets for this workflow type will be removed.",
+      confirmLabel: "Delete project",
+      destructive: true,
+    });
     if (!confirmed) return;
 
     setDeletingProject(true);
@@ -192,8 +207,53 @@ export default function ProjectOverviewPage() {
     }
   };
 
+  const handleManualUploadComplete = async (
+    result: ProjectVideoUploadResponse,
+    options: { fastTrack: boolean; targetStage: "raw" | "final" },
+  ) => {
+    const uploadedFiles = (result.uploaded || []).map((item) => item.relative_path);
+    if (uploadedFiles.length === 0) {
+      await load();
+      return;
+    }
+
+    if (options.fastTrack) {
+      let added = 0;
+      for (const relativePath of uploadedFiles) {
+        const meta = await queueBuilderApi.getAssetMetadata("video", relativePath).catch(() => ({ title: "", description: "", tags: "" }));
+        await queueBuilderApi.addToQueue({
+          project_type: "video",
+          relative_path: relativePath,
+          title: meta.title || (relativePath.split("/").pop() || "").replace(/\.[^\.]+$/, ""),
+          description: meta.description || `Uploaded from project ${name}`,
+          tags: meta.tags || "#video",
+        });
+        added += 1;
+      }
+      await load();
+      toast.success(`Uploaded ${uploadedFiles.length} file(s) and queued ${added} item(s).`);
+      if ((result.errors || []).length > 0) {
+        toast.warning(`${result.errors?.length} file skipped. Check format or duplicate naming.`);
+      }
+      router.push(buildQueueBuilderHref(uploadedFiles));
+      return;
+    }
+
+    await load();
+    toast.success(`Uploaded ${uploadedFiles.length} file(s) to ${options.targetStage}.`);
+    if ((result.errors || []).length > 0) {
+      toast.warning(`${result.errors?.length} file skipped. Check format or duplicate naming.`);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-4 px-1 pb-4 sm:space-y-6">
+      <ProjectManualUploadDialog
+        open={manualUploadOpen}
+        onOpenChange={setManualUploadOpen}
+        projectName={name}
+        onUploaded={handleManualUploadComplete}
+      />
       <PageHeader
         title={`Project: ${name}`}
         description={(
@@ -257,6 +317,16 @@ export default function ProjectOverviewPage() {
                 </Button>
               </>
             )}
+            {projectType === "video" && (
+              <Button
+                onClick={() => setManualUploadOpen(true)}
+                size="sm"
+                variant="outline"
+                className="border-border hover:bg-elevated"
+              >
+                <UploadCloud className="w-4 h-4 mr-1.5" /> Manual Upload
+              </Button>
+            )}
             <Button 
               onClick={() => router.push(`/looper?project=${encodeURIComponent(name)}`)} 
               size="sm" 
@@ -310,6 +380,9 @@ export default function ProjectOverviewPage() {
               <p className="text-xs text-muted-foreground">
                 Pilih asset final, kirim ke queue, lalu lanjut atur platform dan jadwal di Queue Builder.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Untuk file dari lokal, gunakan <span className="font-medium text-foreground">Manual Upload</span> lalu centang fast track bila ingin langsung masuk Queue Builder.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => router.push("/project-manager")} className="border-border hover:bg-elevated">
@@ -317,7 +390,7 @@ export default function ProjectOverviewPage() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => router.push("/publisher")}
+                onClick={() => router.push("/queue-builder")}
                 disabled={queueCount === 0}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
@@ -465,16 +538,17 @@ export default function ProjectOverviewPage() {
                   const files = Array.from(selected);
                   let added = 0;
                   for (const rel of files) {
-                    const meta = await publisherApi.getAssetMetadata("video", rel).catch(() => ({ title: "", description: "", tags: "" }));
+                    const meta = await queueBuilderApi.getAssetMetadata("video", rel).catch(() => ({ title: "", description: "", tags: "" }));
                     const title = meta.title || (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
                     const description = meta.description || `Uploaded from project ${name}`;
                     const tags = meta.tags || "#video";
-                    await publisherApi.addToQueue({ project_type: "video", relative_path: rel, title, description, tags });
+                    await queueBuilderApi.addToQueue({ project_type: "video", relative_path: rel, title, description, tags });
                     added++;
                   }
                   toast.success(`Queued ${added} video(s)`);
                   setSelected(new Set());
                   await load();
+                  router.push(buildQueueBuilderHref(files));
                 } catch (e: unknown) {
                   const msg = e instanceof Error ? e.message : "";
                   toast.error(msg || "Failed to add to queue");
@@ -487,7 +561,7 @@ export default function ProjectOverviewPage() {
           {projectType === "video" && queueCount > 0 && (
             <Button
               size="sm"
-              onClick={() => router.push("/publisher")}
+              onClick={() => router.push("/queue-builder")}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               Open Queue Builder
@@ -505,14 +579,14 @@ export default function ProjectOverviewPage() {
                   for (const rel of files) {
                     const base = (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
                     const seed = metaByFile[rel];
-                    const gen = await publisherApi.generateAssetMetadata({
+                    const gen = await queueBuilderApi.generateAssetMetadata({
                       project_type: projectType,
                       file: rel,
                       title: seed?.title || "",
                       description: seed?.description || "",
                       tags: seed?.tags || "",
                     }).catch(() => ({ title: base, description: `Asset from project ${name}`, tags: projectType === "video" ? "#video" : "#image" }));
-                    await publisherApi.setAssetMetadata(projectType, rel, { title: gen.title, description: gen.description, tags: gen.tags });
+                    await queueBuilderApi.setAssetMetadata(projectType, rel, { title: gen.title, description: gen.description, tags: gen.tags });
                     updated++;
                   }
                   toast.success(`Generated metadata for ${updated} asset(s)`);
@@ -589,16 +663,17 @@ export default function ProjectOverviewPage() {
                     const files = Array.from(selected);
                     let added = 0;
                     for (const rel of files) {
-                      const meta = await publisherApi.getAssetMetadata("video", rel).catch(() => ({ title: "", description: "", tags: "" }));
+                      const meta = await queueBuilderApi.getAssetMetadata("video", rel).catch(() => ({ title: "", description: "", tags: "" }));
                       const title = meta.title || (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
                       const description = meta.description || `Uploaded from project ${name}`;
                       const tags = meta.tags || "#video";
-                      await publisherApi.addToQueue({ project_type: "video", relative_path: rel, title, description, tags });
+                      await queueBuilderApi.addToQueue({ project_type: "video", relative_path: rel, title, description, tags });
                       added++;
                     }
                     toast.success(`Queued ${added} video(s)`);
                     setSelected(new Set());
                     await load();
+                    router.push(buildQueueBuilderHref(files));
                   } catch (e: unknown) {
                     const msg = e instanceof Error ? e.message : "";
                     toast.error(msg || "Failed to add to queue");
@@ -612,7 +687,7 @@ export default function ProjectOverviewPage() {
               <Button
                 size="sm"
                 className="h-8 whitespace-nowrap bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => router.push("/publisher")}
+                onClick={() => router.push("/queue-builder")}
               >
                 Queue Builder
               </Button>

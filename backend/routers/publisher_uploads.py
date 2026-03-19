@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from typing import Dict, Any
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +14,9 @@ from backend.core.json_utils import ensure_json_dict
 from backend.core.logger import logger
 from backend.core.realtime import publish_realtime_event
 from backend.models.upload_queue import UploadQueueItem
+from backend.routers.publisher_queue import sync_queue_job_state
 from backend.routers.publisher_schemas import UploadRequest, BatchUploadRequest
+from backend.services.telegram_notifier import send_telegram_message
 
 
 router = APIRouter()
@@ -31,6 +33,44 @@ def _publish_queue_event(db: Session, item: UploadQueueItem, event_type: str = "
     )
 
 
+def _build_upload_notification(item: UploadQueueItem) -> str | None:
+    status = (item.status or "").strip().lower()
+    if status not in {"completed", "completed_with_errors"}:
+        return None
+
+    success_lines: list[str] = []
+    failed_lines: list[str] = []
+    for platform, data in (item.platforms or {}).items():
+        line = f"- {platform}: {data.get('message', '')}".strip()
+        if data.get("status") == "success":
+            success_lines.append(line)
+        else:
+            failed_lines.append(line)
+
+    lines = [
+        "Publisher upload finished",
+        f"File: {item.filename}",
+        f"Status: {item.status}",
+    ]
+
+    if success_lines:
+        lines.append("Success:")
+        lines.extend(success_lines)
+    if failed_lines:
+        lines.append("Failed:")
+        lines.extend(failed_lines)
+    if item.last_error and not failed_lines:
+        lines.append(f"Error: {item.last_error}")
+
+    return "\n".join(lines)
+
+
+def _notify_upload_result(item: UploadQueueItem) -> None:
+    message = _build_upload_notification(item)
+    if message:
+        send_telegram_message(message)
+
+
 def _get_or_create_item(db: Session, filename: str) -> UploadQueueItem:
     item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == filename).first()
     if not item:
@@ -39,6 +79,54 @@ def _get_or_create_item(db: Session, filename: str) -> UploadQueueItem:
         db.add(item)
         db.flush()
     return item
+
+
+def _max_attempts() -> int:
+    try:
+        return max(1, int(os.environ.get("PUBLISHER_JOB_MAX_ATTEMPTS", "3")))
+    except Exception:
+        return 3
+
+
+def _retry_delay_seconds(attempt_count: int) -> int:
+    base = max(30, int(os.environ.get("PUBLISHER_RETRY_BASE_SECONDS", "60")))
+    capped_attempt = max(1, attempt_count)
+    return min(base * (2 ** (capped_attempt - 1)), 3600)
+
+
+def _mark_retryable_failure(item: UploadQueueItem, message: str) -> None:
+    item.last_error = (message or "Upload failed")[:1000]
+    item.lease_expires_at = None
+    if int(item.attempt_count or 0) < _max_attempts():
+        item.worker_state = "queued"
+        item.status = "queued"
+        item.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=_retry_delay_seconds(int(item.attempt_count or 0)))
+    else:
+        item.worker_state = "failed"
+        item.status = "failed"
+        item.next_retry_at = None
+
+
+def _apply_legacy_job_config(item: UploadQueueItem, request: UploadRequest) -> None:
+    item.target_platforms = request.platforms or []
+    account_map = {}
+    for platform in request.platforms or []:
+        if request.account_id:
+            account_map[platform] = request.account_id
+    item.account_map = account_map
+    item.options = {
+        "open_browser": request.open_browser,
+        "pw_debug": request.pw_debug,
+        "youtube_privacy": request.youtube_privacy,
+        "youtube_category_id": request.youtube_category_id,
+        "product_id": request.product_id,
+        "platform_publish_schedule": request.schedule or "",
+    }
+    try:
+        item.scheduled_at = datetime.fromisoformat(request.schedule) if request.schedule else None
+    except Exception:
+        item.scheduled_at = None
+    sync_queue_job_state(item)
 
 
 def _run_youtube_playwright_upload(
@@ -114,18 +202,19 @@ def process_upload_task(filename: str, request: UploadRequest):
 
         if not os.path.exists(file_path):
             logger.error(f"Cannot upload {filename}: file not found at {file_path}")
-            item.status = "completed_with_errors"
-            item.worker_state = "failed"
-            item.last_error = f"File not found: {file_path}"
+            _mark_retryable_failure(item, f"File not found: {file_path}")
             _publish_queue_event(db, item)
+            _notify_upload_result(item)
             db.commit()
             return
 
         item = _get_or_create_item(db, filename)
         item.status = "uploading"
+        item.worker_state = "running"
         item.title = request.title
         item.description = request.description
         item.tags = request.tags
+        item.next_retry_at = None
         _publish_queue_event(db, item)
         db.commit()
 
@@ -299,14 +388,24 @@ def process_upload_task(filename: str, request: UploadRequest):
         item = db.query(UploadQueueItem).filter(UploadQueueItem.filename == filename).first()
         if item:
             item.platforms = platforms_status
-            item.status = "completed" if all_success else "completed_with_errors"
-            item.worker_state = "completed" if all_success else "failed"
-            item.last_error = "" if all_success else "; ".join(
-                f"{k}: {v.get('message', '')}" for k, v in platforms_status.items() if v.get("status") != "success"
-            )[:1000]
+            item.lease_expires_at = None
+            if all_success:
+                item.status = "completed"
+                item.worker_state = "completed"
+                item.last_error = ""
+                item.next_retry_at = None
+            else:
+                _mark_retryable_failure(
+                    item,
+                    "; ".join(
+                        f"{k}: {v.get('message', '')}" for k, v in platforms_status.items() if v.get("status") != "success"
+                    )[:1000],
+                )
             if all_success:
                 item.uploaded_at = datetime.now()
             _publish_queue_event(db, item)
+            if item.worker_state == "failed" or all_success:
+                _notify_upload_result(item)
             db.commit()
 
         logger.info(f"Finished upload task for {filename}")
@@ -323,12 +422,16 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
         raise HTTPException(status_code=400, detail="No account_id provided for bulk upload.")
 
     videos_data = []
+    has_scheduled_items = False
     for vid in request.videos:
         item = _get_or_create_item(db, vid.filename)
         file_path = item.file_path if item.file_path and os.path.exists(item.file_path) else str(UPLOAD_QUEUE_DIR / vid.filename)
 
         if not os.path.exists(file_path):
             continue
+
+        if vid.schedule:
+            has_scheduled_items = True
 
         videos_data.append({
             "video_path": file_path,
@@ -344,16 +447,33 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
         })
 
         item = _get_or_create_item(db, vid.filename)
-        item.status = "uploading"
         item.title = vid.title
         item.description = vid.description
         item.tags = vid.tags
+        item.target_platforms = request.platforms or []
+        item.account_map = {platform: request.account_id for platform in (request.platforms or []) if request.account_id}
+        item.options = {
+            "open_browser": request.open_browser,
+            "pw_debug": request.pw_debug,
+            "youtube_privacy": vid.youtube_privacy,
+            "youtube_category_id": vid.youtube_category_id,
+            "product_id": vid.product_id or "",
+            "platform_publish_schedule": vid.schedule or "",
+        }
+        try:
+            item.scheduled_at = datetime.fromisoformat(vid.schedule) if vid.schedule else None
+        except Exception:
+            item.scheduled_at = None
+        sync_queue_job_state(item)
         _publish_queue_event(db, item)
 
     if not videos_data:
         raise HTTPException(status_code=400, detail="No valid videos found for batch upload.")
 
     db.commit()
+
+    if has_scheduled_items:
+        return {"status": "success", "message": f"Configured {len(videos_data)} scheduled jobs"}
 
     async def run_batch_task(account_id, platforms, videos, open_browser_flag=False, pw_debug_flag=False):
         from backend.core.database import SessionLocal
@@ -383,9 +503,12 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                             }
                             item.platforms = plats
                             item.status = "completed" if result.get("success") else "completed_with_errors"
+                            item.worker_state = "completed" if result.get("success") else "failed"
+                            item.last_error = "" if result.get("success") else (result.get("message", "") or "")[:1000]
                             if result.get("success"):
                                 item.uploaded_at = datetime.now()
                             _publish_queue_event(db2, item)
+                            _notify_upload_result(item)
                 elif platform == "youtube":
                     if account.auth_method == "playwright":
                         for vid in videos:
@@ -418,8 +541,12 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                                 }
                                 item.platforms = plats
                                 item.status = "completed" if status == "success" else "completed_with_errors"
+                                item.worker_state = "completed" if status == "success" else "failed"
+                                item.last_error = "" if status == "success" else (msg or "")[:1000]
                                 if status == "success":
                                     item.uploaded_at = datetime.now()
+                                _publish_queue_event(db2, item)
+                                _notify_upload_result(item)
                     else:
                         from backend.services.uploaders.youtube_uploader import upload_video
                         if not account.oauth_token_json:
@@ -459,9 +586,12 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                                 }
                                 item.platforms = plats
                                 item.status = "completed" if status == "success" else "completed_with_errors"
+                                item.worker_state = "completed" if status == "success" else "failed"
+                                item.last_error = "" if status == "success" else (msg or "")[:1000]
                                 if status == "success":
                                     item.uploaded_at = datetime.now()
                                 _publish_queue_event(db2, item)
+                                _notify_upload_result(item)
                 elif platform == "facebook":
                     from backend.services.uploaders.facebook_uploader import upload_video_to_facebook
                     if not account.oauth_token_json:
@@ -493,8 +623,12 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                             }
                             item.platforms = plats
                             item.status = "completed" if status == "success" else "completed_with_errors"
+                            item.worker_state = "completed" if status == "success" else "failed"
+                            item.last_error = "" if status == "success" else (msg or "")[:1000]
                             if status == "success":
                                 item.uploaded_at = datetime.now()
+                            _publish_queue_event(db2, item)
+                            _notify_upload_result(item)
                 elif platform == "instagram":
                     from backend.services.uploaders.instagram_uploader import upload_to_instagram
 
@@ -520,8 +654,12 @@ async def process_batch_upload(request: BatchUploadRequest, background_tasks: Ba
                             }
                             item.platforms = plats
                             item.status = "completed" if result.get("success") else "completed_with_errors"
+                            item.worker_state = "completed" if result.get("success") else "failed"
+                            item.last_error = "" if result.get("success") else (result.get("message", "") or "")[:1000]
                             if result.get("success"):
                                 item.uploaded_at = datetime.now()
+                            _publish_queue_event(db2, item)
+                            _notify_upload_result(item)
             db2.commit()
         finally:
             db2.close()
@@ -537,5 +675,14 @@ async def trigger_upload(filename: str, request: UploadRequest, background_tasks
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found in queue")
+    item = _get_or_create_item(db, filename)
+    item.title = request.title
+    item.description = request.description
+    item.tags = request.tags
+    _apply_legacy_job_config(item, request)
+    _publish_queue_event(db, item)
+    db.commit()
+    if request.schedule:
+        return {"message": f"Scheduled job created for {filename}"}
     background_tasks.add_task(process_upload_task, filename, request)
     return {"message": f"Upload job for {filename} queued successfully"}

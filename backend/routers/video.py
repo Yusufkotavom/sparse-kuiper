@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
 import os
 import json
 import hashlib
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from backend.models.account import Account
 from backend.services.playwright_session_guard import check_grok_session
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v", ".avi"}
 
 # Pydantic Models
 class SavePromptsRequest(BaseModel):
@@ -48,6 +50,31 @@ class GenerateVideoRequest(BaseModel):
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
+
+
+def _get_project_stage_dir(project_name: str, target_stage: str) -> Path:
+    project_dir = VIDEO_PROJECTS_DIR / project_name
+    stage = (target_stage or "raw").strip().lower()
+    if stage == "raw":
+        return project_dir / "raw_videos"
+    if stage == "final":
+        return project_dir / "final"
+    raise HTTPException(status_code=400, detail="Invalid target_stage")
+
+
+def _build_unique_filename(target_dir: Path, filename: str) -> str:
+    original = Path(filename).name.strip()
+    if not original:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    stem = Path(original).stem or "upload"
+    suffix = Path(original).suffix
+    candidate = original
+    counter = 1
+    while (target_dir / candidate).exists():
+        candidate = f"{stem}-{counter}{suffix}"
+        counter += 1
+    return candidate
 
 
 @router.get("/thumbnail")
@@ -158,13 +185,80 @@ async def list_project_videos(project_name: str):
             if not path.exists():
                 return []
             # Return relative path to match static mount point
-            return [str(f.relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/") for f in path.iterdir() if f.suffix.lower() == ".mp4"]
+            return [
+                str(f.relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/")
+                for f in path.iterdir()
+                if f.is_file() and f.suffix.lower() in ALLOWED_VIDEO_EXTENSIONS
+            ]
 
         return {
             "raw": get_videos(raw_dir),
             "final": get_videos(final_dir),
             "archive": get_videos(archive_dir)
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_name}/upload")
+async def upload_project_videos(
+    project_name: str,
+    files: List[UploadFile] = File(...),
+    target_stage: str = Form("raw"),
+):
+    try:
+        project_dir = VIDEO_PROJECTS_DIR / project_name
+        if not project_dir.exists():
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        target_dir = _get_project_stage_dir(project_name, target_stage)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        uploaded = []
+        rejected = []
+
+        for upload in files:
+            try:
+                filename = Path(upload.filename or "").name
+                if not filename:
+                    rejected.append("One file has no filename")
+                    continue
+
+                suffix = Path(filename).suffix.lower()
+                if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+                    rejected.append(f"{filename}: unsupported format")
+                    continue
+
+                safe_name = _build_unique_filename(target_dir, filename)
+                dest_path = target_dir / safe_name
+                with open(dest_path, "wb") as handle:
+                    shutil.copyfileobj(upload.file, handle)
+
+                uploaded.append({
+                    "filename": safe_name,
+                    "relative_path": str(dest_path.relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/"),
+                    "stage": target_stage,
+                })
+            finally:
+                await upload.close()
+
+        if not uploaded:
+            detail = rejected[0] if rejected else "No valid files uploaded"
+            raise HTTPException(status_code=400, detail=detail)
+
+        status = "partial_success" if rejected else "success"
+        message = f"Uploaded {len(uploaded)} file(s) to {target_stage}"
+        if rejected:
+            message = f"{message}. {len(rejected)} file(s) skipped."
+
+        return {
+            "status": status,
+            "message": message,
+            "uploaded": uploaded,
+            "errors": rejected,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
