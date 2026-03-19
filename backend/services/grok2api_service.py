@@ -52,6 +52,60 @@ def _safe_filename(prefix: str, index: int, suffix: str) -> str:
     return f"{prefix}-{stamp}-{index:03d}{suffix}"
 
 
+def _extract_video_url(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
+    direct_url = (payload.get("url") or "").strip()
+    if direct_url:
+        return direct_url
+
+    data_items = payload.get("data") or []
+    if isinstance(data_items, list) and data_items:
+        first_item = data_items[0] if isinstance(data_items[0], dict) else {}
+        nested_url = (first_item.get("url") or "").strip()
+        if nested_url:
+            return nested_url
+
+    return ""
+
+
+def _download_video_bytes(video_url: str) -> bytes:
+    normalized_url = (video_url or "").strip()
+    if not normalized_url:
+        raise RuntimeError("Empty video URL.")
+    if normalized_url.startswith("/"):
+        normalized_url = _api_url(normalized_url)
+
+    errors: list[str] = []
+
+    # 1) Direct download, in case URL is a signed public asset.
+    try:
+        direct_response = requests.get(normalized_url, timeout=600)
+        direct_response.raise_for_status()
+        return direct_response.content
+    except Exception as exc:
+        errors.append(f"direct: {exc}")
+
+    # 2) Authenticated download, some providers require bearer token for asset URLs.
+    auth_headers: dict[str, str] = {}
+    api_key = (settings.grok2api_api_key or "").strip()
+    if api_key:
+        auth_headers["Authorization"] = f"Bearer {api_key}"
+    if auth_headers:
+        try:
+            auth_response = requests.get(normalized_url, headers=auth_headers, timeout=600)
+            auth_response.raise_for_status()
+            return auth_response.content
+        except Exception as exc:
+            errors.append(f"bearer: {exc}")
+
+    raise RuntimeError(
+        "Unable to download video asset. "
+        f"url={normalized_url} attempts={'; '.join(errors)}"
+    )
+
+
 def generate_images_to_dir(
     *,
     prompts: list[str],
@@ -146,16 +200,15 @@ def generate_videos_to_dir(
                 raise RuntimeError(_error_text(response))
 
             data = response.json()
-            video_url = (data.get("url") or "").strip()
+            video_url = _extract_video_url(data)
             if not video_url:
                 raise RuntimeError("Response did not contain downloadable video URL.")
 
-            video_response = requests.get(video_url, timeout=600)
-            video_response.raise_for_status()
+            video_bytes = _download_video_bytes(video_url)
 
             filename = _safe_filename("grok2api-video", index, ".mp4")
             out_path = output_dir / filename
-            out_path.write_bytes(video_response.content)
+            out_path.write_bytes(video_bytes)
             created.append(str(out_path))
         except Exception as exc:
             errors.append(f"Prompt #{index}: {exc}")
