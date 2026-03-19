@@ -17,6 +17,14 @@ def _base_url() -> str:
     return base
 
 
+def _api_url(path: str) -> str:
+    base = _base_url()
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    if base.endswith("/v1") and normalized_path.startswith("/v1/"):
+        normalized_path = normalized_path[3:]
+    return f"{base}{normalized_path}"
+
+
 def _headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     api_key = (settings.grok2api_api_key or "").strip()
@@ -63,7 +71,7 @@ def generate_images_to_dir(
 
         try:
             response = requests.post(
-                f"{_base_url()}/v1/images/generations",
+                _api_url("/v1/images/generations"),
                 headers=_headers(),
                 json=payload,
                 timeout=240,
@@ -120,7 +128,7 @@ def generate_videos_to_dir(
 
         try:
             response = requests.post(
-                f"{_base_url()}/v1/videos",
+                _api_url("/v1/videos"),
                 headers=_headers(),
                 json=payload,
                 timeout=600,

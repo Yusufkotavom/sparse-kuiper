@@ -39,6 +39,15 @@ npm run dev
 - Backend key/config:
   - `config.json` (Groq/OpenAI/Gemini/Azure)
   - atau environment variable (`.env`) sesuai kebutuhan deploy
+  - template env backend: `backend/.env.example`
+
+Contoh env minimal untuk Grok2API (backend):
+```env
+GROK2API_BASE_URL=https://your-grok2api-host
+GROK2API_API_KEY=your_grok2api_api_key
+```
+
+Catatan: backend otomatis handle dua format `GROK2API_BASE_URL` (dengan atau tanpa suffix `/v1`) untuk mencegah error endpoint Not Found karena double `/v1`.
 
 ## Validasi cepat setelah startup
 ```bash

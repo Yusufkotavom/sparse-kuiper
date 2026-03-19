@@ -34,5 +34,6 @@ test-results/
 # Secrets and env
 .env
 .env.*
+!.env.example
 config.json
 *.key
