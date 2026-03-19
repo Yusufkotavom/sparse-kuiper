@@ -14,6 +14,7 @@ from backend.core.logger import logger
 from backend.core.database import get_db
 from backend.models.project_config import ProjectConfig as ProjectConfigModel
 from backend.models.account import Account
+from backend.services.grok2api_service import generate_images_to_dir
 from backend.services.playwright_session_guard import check_whisk_session
 
 router = APIRouter(prefix="/api/v1/kdp", tags=["kdp"])
@@ -57,6 +58,12 @@ class BulkDeleteRequest(BaseModel):
 class MoveRequest(BaseModel):
     filename: str
     target_stage: str
+
+
+class GenerateGrok2ApiImagesRequest(BaseModel):
+    prompts: List[str] = []
+    size: str = "1024x1024"
+    model: str = "grok-imagine-1.0"
 
 @router.get("/projects")
 async def list_projects():
@@ -329,6 +336,48 @@ async def trigger_kdp_generation(project_name: str, db: Session = Depends(get_db
         
         logger.info(f"[API] Bot process started (PID {process.pid}) for: {project_name} ({len(prompts_data)} prompts) account={whisk_account_id}")
         return {"status": "success", "message": f"Bot started for '{project_name}' with {len(prompts_data)} prompts (PID: {process.pid}). account_id={whisk_account_id}. A Chrome window should open shortly."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_name}/generate-grok2api")
+async def trigger_kdp_generation_grok2api(project_name: str, req: GenerateGrok2ApiImagesRequest):
+    try:
+        project_dir = PROJECTS_DIR / project_name
+        if not project_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found.")
+
+        prompts = [prompt.strip() for prompt in (req.prompts or []) if prompt and prompt.strip()]
+        if not prompts:
+            prompts_file = project_dir / "prompts.json"
+            if prompts_file.exists():
+                with open(prompts_file, "r", encoding="utf-8") as handle:
+                    prompts = [prompt.strip() for prompt in json.load(handle) if isinstance(prompt, str) and prompt.strip()]
+
+        if not prompts:
+            raise HTTPException(status_code=400, detail="No prompts available. Generate or save prompts first.")
+
+        result = generate_images_to_dir(
+            prompts=prompts,
+            output_dir=project_dir / "raw_images",
+            size=req.size,
+            model=req.model,
+        )
+        created_relative = [str(Path(path).relative_to(PROJECTS_DIR)).replace("\\", "/") for path in result["created"]]
+        created_count = len(created_relative)
+        errors = result["errors"]
+        message = f"Generated {created_count} image(s) via Grok2API."
+        if errors:
+            message += f" {len(errors)} prompt(s) failed."
+        return {
+            "status": result["status"],
+            "message": message,
+            "created": created_relative,
+            "errors": errors,
+            "provider": "grok2api",
+        }
     except HTTPException:
         raise
     except Exception as e:

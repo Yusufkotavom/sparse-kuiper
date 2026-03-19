@@ -21,6 +21,8 @@ services:
       - PYTHONUNBUFFERED=1
       - APP_ENV=local
       - DATABASE_URL=${DATABASE_URL:-sqlite:///./nomad_hub.db}
+      - GROK2API_BASE_URL=${GROK2API_BASE_URL:-}
+      - GROK2API_API_KEY=${GROK2API_API_KEY:-}
     restart: always
 
   # Frontend Service (Next.js)

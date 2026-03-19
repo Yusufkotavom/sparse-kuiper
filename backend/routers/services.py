@@ -44,12 +44,6 @@ def get_service_config(name: str) -> Dict[str, Any] | None:
             "cwd": BASE_DIR / "services" / "Creator Studio",
             "port": 8502
         }
-    elif name == "grok2api-studio":
-        return {
-            "cmd": [sys.executable, "app.py"],
-            "cwd": BASE_DIR / "grok2api" / "gradio",
-            "port": 7861
-        }
     elif name == "studio-test":
         return {
             "cmd": [sys.executable, "-m", "streamlit", "run", "app.py", "--server.port", "8503", "--server.address", "localhost"],

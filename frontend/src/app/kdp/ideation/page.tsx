@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { kdpApi, settingsApi, PromptTemplate, ProjectConfig, accountsApi, Account } from "@/lib/api";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,7 @@ export default function IdeationPage() {
     const [character, setCharacter] = useState("cute animal");
     const [prompts, setPrompts] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isGeneratingAssets, setIsGeneratingAssets] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -223,6 +224,33 @@ export default function IdeationPage() {
         navigator.clipboard.writeText(text);
         setCopiedIndex(index);
         setTimeout(() => setCopiedIndex(null), 2000);
+    };
+
+    const handleGenerateAssets = async () => {
+        if (!selectedProject) {
+            toast.error("Pilih project dulu sebelum generate image.");
+            return;
+        }
+        if (prompts.length === 0) {
+            toast.error("Belum ada prompt untuk dijalankan.");
+            return;
+        }
+
+        const composedPrompts = prompts.map((prompt) => `${prefix.trim()} ${prompt.trim()} ${suffix.trim()}`.trim());
+        setIsGeneratingAssets(true);
+        try {
+            const result = await kdpApi.generateWithGrok2Api(selectedProject, {
+                prompts: composedPrompts,
+            });
+            toast.success(result.message);
+            if ((result.errors || []).length > 0) {
+                toast.warning(`${result.errors?.length} prompt gagal. Cek backend log bila perlu.`);
+            }
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to generate images via Grok2API");
+        } finally {
+            setIsGeneratingAssets(false);
+        }
     };
 
     return (
@@ -443,16 +471,15 @@ export default function IdeationPage() {
                                 >
                                     Save to Project
                                 </Button>
-                                <Link
-                                    href={`/grok2api-studio?mode=image`}
-                                    className={buttonVariants({
-                                        variant: "outline",
-                                        className: "border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/5 h-10 font-bold px-6 w-full sm:w-auto",
-                                    })}
+                                <Button
+                                    onClick={handleGenerateAssets}
+                                    disabled={!selectedProject || prompts.length === 0 || isGeneratingAssets}
+                                    variant="outline"
+                                    className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/5 h-10 font-bold px-6 w-full sm:w-auto"
                                 >
-                                    <ImageIcon className="w-4 h-4 mr-2" />
-                                    Open Grok2API
-                                </Link>
+                                    {isGeneratingAssets ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageIcon className="w-4 h-4 mr-2" />}
+                                    Generate via Grok2API
+                                </Button>
                             </div>
 
                             {error && (
@@ -528,13 +555,6 @@ export default function IdeationPage() {
                             <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/grok2api-studio?mode=image`)}
-                            >
-                                Open Grok2API Studio
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
                                 onClick={() => router.push(`/project-manager/${encodeURIComponent(selectedProject)}`)}
                             >
                                 Buka Project Detail
@@ -544,6 +564,14 @@ export default function IdeationPage() {
                                 onClick={() => router.push(`/kdp/curation?project=${encodeURIComponent(selectedProject)}`)}
                             >
                                 Lanjut ke Curation
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleGenerateAssets}
+                                disabled={prompts.length === 0 || isGeneratingAssets}
+                            >
+                                {isGeneratingAssets ? "Generating..." : "Run Grok2API"}
                             </Button>
                         </div>
                     </div>

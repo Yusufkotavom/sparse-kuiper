@@ -16,6 +16,7 @@ from backend.core.config import VIDEO_PROJECTS_DIR, BASE_DIR
 from backend.core.database import get_db
 from backend.models.project_config import ProjectConfig as ProjectConfigModel
 from backend.models.account import Account
+from backend.services.grok2api_service import generate_videos_to_dir
 from backend.services.playwright_session_guard import check_grok_session
 
 router = APIRouter(prefix="/api/v1/video", tags=["video"])
@@ -47,6 +48,15 @@ class MoveRequest(BaseModel):
 class GenerateVideoRequest(BaseModel):
     use_reference: bool = True
     headless_mode: bool = True
+
+
+class GenerateGrok2ApiVideosRequest(BaseModel):
+    prompts: List[str] = []
+    size: str = "1792x1024"
+    seconds: int = 6
+    quality: str = "standard"
+    model: str = "grok-imagine-1.0-video"
+    image_url: str | None = None
 
 class BulkDeleteRequest(BaseModel):
     filenames: List[str]
@@ -465,6 +475,51 @@ async def curate_video(project_name: str, req: CurateRequest):
             except Exception as ex:
                 raise HTTPException(status_code=500, detail=f"Failed to move file: {ex}")
         return {"status": "success", "message": f"Moved {req.filename} to final"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_name}/generate-grok2api")
+async def trigger_video_generation_grok2api(project_name: str, req: GenerateGrok2ApiVideosRequest):
+    try:
+        project_dir = VIDEO_PROJECTS_DIR / project_name
+        if not project_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found.")
+
+        prompts = [prompt.strip() for prompt in (req.prompts or []) if prompt and prompt.strip()]
+        if not prompts:
+            prompts_file = project_dir / "prompts.json"
+            if prompts_file.exists():
+                with open(prompts_file, "r", encoding="utf-8") as handle:
+                    prompts = [prompt.strip() for prompt in json.load(handle) if isinstance(prompt, str) and prompt.strip()]
+
+        if not prompts:
+            raise HTTPException(status_code=400, detail="No prompts available. Generate or save prompts first.")
+
+        result = generate_videos_to_dir(
+            prompts=prompts,
+            output_dir=project_dir / "raw_videos",
+            size=req.size,
+            seconds=req.seconds,
+            quality=req.quality,
+            model=req.model,
+            image_url=req.image_url,
+        )
+        created_relative = [str(Path(path).relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/") for path in result["created"]]
+        created_count = len(created_relative)
+        errors = result["errors"]
+        message = f"Generated {created_count} video(s) via Grok2API."
+        if errors:
+            message += f" {len(errors)} prompt(s) failed."
+        return {
+            "status": result["status"],
+            "message": message,
+            "created": created_relative,
+            "errors": errors,
+            "provider": "grok2api",
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

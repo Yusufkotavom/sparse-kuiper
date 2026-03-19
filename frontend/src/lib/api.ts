@@ -178,6 +178,23 @@ export const kdpApi = {
         });
     },
 
+    generateWithGrok2Api: async (
+        projectName: string,
+        payload: {
+            prompts?: string[];
+            size?: string;
+            model?: string;
+        },
+    ): Promise<{ status: string; message: string; created: string[]; errors?: string[]; provider: string }> => {
+        return fetchApi<{ status: string; message: string; created: string[]; errors?: string[]; provider: string }>(
+            `/kdp/projects/${encodeURIComponent(projectName)}/generate-grok2api`,
+            {
+                method: "POST",
+                body: JSON.stringify(payload),
+            }
+        );
+    },
+
     bulkDeleteProjectImages: async (projectName: string, filenames: string[]): Promise<{ status: string; message: string; errors?: string[] }> => {
         return fetchApi<{ status: string; message: string; errors?: string[] }>(`/kdp/projects/${projectName}/images`, {
             method: "DELETE",
@@ -346,6 +363,26 @@ export const videoApi = {
         return fetchApi<{ status: string; message: string }>(`/video/projects/${encodeURIComponent(projectName)}`, {
             method: "DELETE",
         });
+    },
+
+    generateWithGrok2Api: async (
+        projectName: string,
+        payload: {
+            prompts?: string[];
+            size?: string;
+            seconds?: number;
+            quality?: string;
+            model?: string;
+            image_url?: string;
+        },
+    ): Promise<{ status: string; message: string; created: string[]; errors?: string[]; provider: string }> => {
+        return fetchApi<{ status: string; message: string; created: string[]; errors?: string[]; provider: string }>(
+            `/video/projects/${encodeURIComponent(projectName)}/generate-grok2api`,
+            {
+                method: "POST",
+                body: JSON.stringify(payload),
+            }
+        );
     },
 };
 

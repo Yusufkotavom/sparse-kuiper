@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { ViewToggle } from "@/components/atoms/ViewToggle";
 import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
-import { Cpu, FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2, UploadCloud } from "lucide-react";
+import { Clapperboard, FolderOpen, ImageIcon, RefreshCw, RotateCcw, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyProjectManagerCard, type ProjectType } from "@/components/organisms/ProjectManagerCard";
 import { ProjectManualUploadDialog } from "@/components/organisms/ProjectManualUploadDialog";
@@ -37,6 +37,7 @@ export default function ProjectOverviewPage() {
   const [recentRuns, setRecentRuns] = useState<Array<{ id: string; title: string; status: string; source: "queue" | "job"; at?: string | null }>>([]);
   const [deletingProject, setDeletingProject] = useState(false);
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
+  const [isGeneratingAssets, setIsGeneratingAssets] = useState(false);
 
   const allFiles = useMemo(() => [...items.final, ...items.raw, ...(items.queue || []), ...(items.archive || [])], [items]);
   const filtered = useMemo(() => {
@@ -180,12 +181,33 @@ export default function ProjectOverviewPage() {
     router.push(projectType === "video" ? `/ideation?mode=video&project=${encodeURIComponent(name)}` : `/ideation?mode=image&project=${encodeURIComponent(name)}`);
   };
 
-  const goToGrok2ApiStudio = () => {
-    router.push(projectType === "video" ? "/grok2api-studio?mode=video" : "/grok2api-studio?mode=image");
-  };
-
   const goToCuration = () => {
     router.push(projectType === "video" ? `/curation?mode=video&project=${encodeURIComponent(name)}` : `/curation?mode=image&project=${encodeURIComponent(name)}`);
+  };
+
+  const handleGenerateViaGrok2Api = async () => {
+    if (prompts.length === 0) {
+      toast.error("Project ini belum punya prompt tersimpan.");
+      return;
+    }
+
+    setIsGeneratingAssets(true);
+    try {
+      const result =
+        projectType === "video"
+          ? await videoApi.generateWithGrok2Api(name, { prompts })
+          : await kdpApi.generateWithGrok2Api(name, { prompts });
+      toast.success(result.message);
+      if ((result.errors || []).length > 0) {
+        toast.warning(`${result.errors?.length} prompt gagal. Cek backend log bila perlu.`);
+      }
+      await load();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate via Grok2API";
+      toast.error(message);
+    } finally {
+      setIsGeneratingAssets(false);
+    }
   };
 
   const handleDeleteProject = async () => {
@@ -341,8 +363,15 @@ export default function ProjectOverviewPage() {
             <Button onClick={goToIdeation} size="sm" variant="outline" className="border-border hover:bg-elevated">
               <Sparkles className="w-4 h-4 mr-1.5" /> Kembali ke Ideation
             </Button>
-            <Button onClick={goToGrok2ApiStudio} size="sm" variant="outline" className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 hover:text-cyan-200">
-              <Cpu className="w-4 h-4 mr-1.5" /> Open Grok2API Studio
+            <Button
+              onClick={handleGenerateViaGrok2Api}
+              size="sm"
+              variant="outline"
+              disabled={prompts.length === 0 || isGeneratingAssets}
+              className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 hover:text-cyan-200"
+            >
+              {projectType === "video" ? <Clapperboard className="w-4 h-4 mr-1.5" /> : <ImageIcon className="w-4 h-4 mr-1.5" />}
+              {isGeneratingAssets ? "Generating..." : "Run Grok2API"}
             </Button>
             <Button onClick={goToCuration} size="sm" variant="outline" className="border-border hover:bg-elevated">
               Kembali ke Curation

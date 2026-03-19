@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    grok2api_base_url: str = ""
+    grok2api_api_key: str = ""
 
     azure_openai_api_key: str = ""
     azure_openai_endpoint: str = ""
@@ -51,6 +53,16 @@ def load_local_config():
                     settings.openai_api_key = data["openai_api_key"]
                 if "gemini_api_key" in data:
                     settings.gemini_api_key = data["gemini_api_key"]
+                if "grok2api_base_url" in data:
+                    settings.grok2api_base_url = data["grok2api_base_url"] or ""
+                if "grok2api_api_key" in data:
+                    settings.grok2api_api_key = data["grok2api_api_key"] or ""
+
+                grok2api = data.get("grok2api", {}) if isinstance(data.get("grok2api", {}), dict) else {}
+                if "base_url" in grok2api:
+                    settings.grok2api_base_url = grok2api.get("base_url", "") or settings.grok2api_base_url
+                if "api_key" in grok2api:
+                    settings.grok2api_api_key = grok2api.get("api_key", "") or settings.grok2api_api_key
 
                 azure = data.get("azure_openai", {}) if isinstance(data.get("azure_openai", {}), dict) else {}
                 if "api_key" in azure:
