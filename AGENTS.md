@@ -24,6 +24,9 @@ dikerjakan di windows os
 - Untuk tahap awal create/brief, entry point utama sekarang adalah:
   - `Ideation Hub` di `/ideation`
 - `Ideation Hub` dipakai sebagai jembatan utama bersama untuk video dan image sebelum user bercabang ke prompt builder, generator, project assets, atau runs.
+- Untuk tahap review/selection, entry point utama sekarang adalah:
+  - `Curation Hub` di `/curation`
+- `Curation Hub` dipakai sebagai jembatan review bersama sebelum user lanjut ke project assets, queue builder, runs, atau workspace review spesifik.
 - Halaman project video sekarang juga menyediakan:
   - `Manual Upload` untuk fast-track dari file lokal ke project dan opsional langsung ke Queue Builder
 - Route frontend utama untuk publishing flow adalah:

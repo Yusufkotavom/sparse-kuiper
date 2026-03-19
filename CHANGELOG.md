@@ -46,6 +46,16 @@ Dokumen ini merangkum perubahan penting yang membentuk ulang flow utama project 
 - Menggeser route root `/video` dan `/kdp` agar masuk ke hub ini lebih dulu.
 - Workspace lama `video/ideation` dan `kdp/ideation` tetap dipertahankan sebagai cabang spesifik, dengan positioning baru sebagai `Prompt Builder`.
 
+### Curation Hub / Review Bridge
+- Menambahkan route utama baru:
+  - `/curation`
+- Menyatukan titik masuk review video dan image ke satu pola yang sama lewat `Curation Hub`.
+- Menambahkan:
+  - mode switch `Video Review / Image Review`
+  - project chooser yang ringan untuk mobile
+  - branch cards ke review workspace, prompt builder, project assets, queue/runs, dan route lanjutan
+- Workspace lama `video/curation` dan `kdp/curation` tetap dipertahankan sebagai cabang spesifik, dengan positioning baru sebagai `Curation Workspace`.
+
 ### Project Manager / Asset Flow
 - Menambahkan CTA yang lebih tegas ke:
   - Queue Builder
