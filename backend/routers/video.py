@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
+import uuid
 from sqlalchemy.orm import Session
 
 from backend.core.logger import logger
@@ -496,27 +497,40 @@ async def trigger_video_generation_grok2api(project_name: str, req: GenerateGrok
         if not prompts:
             raise HTTPException(status_code=400, detail="No prompts available. Generate or save prompts first.")
 
-        result = generate_videos_to_dir(
-            prompts=prompts,
-            output_dir=project_dir / "raw_videos",
-            size=req.size,
-            seconds=req.seconds,
-            quality=req.quality,
-            model=req.model,
-            image_url=req.image_url,
+        payload_path = project_dir / f".grok2api-video-job-{uuid.uuid4().hex}.json"
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "project_name": project_name,
+                    "prompts": prompts,
+                    "size": req.size,
+                    "seconds": req.seconds,
+                    "quality": req.quality,
+                    "model": req.model,
+                    "image_url": req.image_url,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
         )
-        created_relative = [str(Path(path).relative_to(VIDEO_PROJECTS_DIR)).replace("\\", "/") for path in result["created"]]
-        created_count = len(created_relative)
-        errors = result["errors"]
-        message = f"Generated {created_count} video(s) via Grok2API."
-        if errors:
-            message += f" {len(errors)} prompt(s) failed."
+
+        kwargs = {}
+        if os.name == "nt":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "backend.services.grok2api_video_worker", str(payload_path)],
+            cwd=str(BASE_DIR),
+            **kwargs,
+        )
+        message = f"Grok2API video job started for '{project_name}'. PID: {process.pid}. Refresh assets later to see results."
         return {
-            "status": result["status"],
+            "status": "started",
             "message": message,
-            "created": created_relative,
-            "errors": errors,
+            "created": [],
+            "errors": [],
             "provider": "grok2api",
+            "pid": process.pid,
         }
     except HTTPException:
         raise

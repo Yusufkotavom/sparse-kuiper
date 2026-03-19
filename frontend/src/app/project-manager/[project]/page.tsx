@@ -38,6 +38,10 @@ export default function ProjectOverviewPage() {
   const [deletingProject, setDeletingProject] = useState(false);
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
   const [isGeneratingAssets, setIsGeneratingAssets] = useState(false);
+  const [grokImageSize, setGrokImageSize] = useState("1024x1024");
+  const [grokVideoSize, setGrokVideoSize] = useState("1792x1024");
+  const [grokVideoSeconds, setGrokVideoSeconds] = useState(6);
+  const [grokVideoQuality, setGrokVideoQuality] = useState("standard");
 
   const allFiles = useMemo(() => [...items.final, ...items.raw, ...(items.queue || []), ...(items.archive || [])], [items]);
   const filtered = useMemo(() => {
@@ -195,8 +199,16 @@ export default function ProjectOverviewPage() {
     try {
       const result =
         projectType === "video"
-          ? await videoApi.generateWithGrok2Api(name, { prompts })
-          : await kdpApi.generateWithGrok2Api(name, { prompts });
+          ? await videoApi.generateWithGrok2Api(name, {
+              prompts,
+              size: grokVideoSize,
+              seconds: grokVideoSeconds,
+              quality: grokVideoQuality,
+            })
+          : await kdpApi.generateWithGrok2Api(name, {
+              prompts,
+              size: grokImageSize,
+            });
       toast.success(result.message);
       if ((result.errors || []).length > 0) {
         toast.warning(`${result.errors?.length} prompt gagal. Cek backend log bila perlu.`);
@@ -439,6 +451,64 @@ export default function ProjectOverviewPage() {
           </div>
         </div>
       ) : null}
+      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">Grok2API Settings</p>
+            <p className="text-xs text-muted-foreground">
+              Pengaturan ini dipakai oleh tombol <span className="font-medium text-foreground">Run Grok2API</span> untuk project ini.
+            </p>
+          </div>
+          <div className="grid w-full gap-3 md:max-w-3xl md:grid-cols-3">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground font-medium">Size</Label>
+              <select
+                value={projectType === "video" ? grokVideoSize : grokImageSize}
+                onChange={(e) => projectType === "video" ? setGrokVideoSize(e.target.value) : setGrokImageSize(e.target.value)}
+                className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+              >
+                {(projectType === "video"
+                  ? ["1792x1024", "1024x1792", "1024x1024", "1280x720", "720x1280"]
+                  : ["1024x1024", "1792x1024", "1024x1792", "1280x720", "720x1280"]
+                ).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            {projectType === "video" ? (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground font-medium">Seconds</Label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={grokVideoSeconds}
+                    onChange={(e) => setGrokVideoSeconds(Math.max(1, Math.min(30, parseInt(e.target.value) || 6)))}
+                    className="flex h-9 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground font-medium">Quality</Label>
+                  <select
+                    value={grokVideoQuality}
+                    onChange={(e) => setGrokVideoQuality(e.target.value)}
+                    className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+                  >
+                    {["standard", "high"].map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <div className="md:col-span-2 flex items-center rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                Seconds dan quality hanya berlaku untuk video.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
       {recentRuns.length > 0 ? (
         <div className="rounded-xl border border-border bg-surface/40 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">

@@ -15,6 +15,8 @@ import { toast } from "sonner";
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed visual prompts for AI video generation (like Grok or Sora). Generate exactly {N} unique, non-repeating prompts for a video sequence featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Describe camera movement, lighting, subject action, and environment clearly.`;
 const DEFAULT_PREFIX = "cinematic video, 4k resolution, highly detailed,";
 const DEFAULT_SUFFIX = "photorealistic, dynamic lighting, masterpiece";
+const VIDEO_SIZE_OPTIONS = ["1792x1024", "1024x1792", "1024x1024", "1280x720", "720x1280"];
+const VIDEO_QUALITY_OPTIONS = ["standard", "high"];
 
 
 export default function IdeationPage() {
@@ -38,6 +40,9 @@ export default function IdeationPage() {
     const [savedTemplates, setSavedTemplates] = useState<PromptTemplate[]>([]);
     const [grokAccounts, setGrokAccounts] = useState<Account[]>([]);
     const [grokAccountId, setGrokAccountId] = useState("grok_default");
+    const [grokVideoSize, setGrokVideoSize] = useState("1792x1024");
+    const [grokVideoSeconds, setGrokVideoSeconds] = useState(6);
+    const [grokVideoQuality, setGrokVideoQuality] = useState("standard");
 
     const workspaceDraft = useMemo(() => ({
         project: selectedProject || projectName || "Belum dipilih",
@@ -242,6 +247,9 @@ export default function IdeationPage() {
         try {
             const result = await videoApi.generateWithGrok2Api(selectedProject, {
                 prompts: composedPrompts,
+                size: grokVideoSize,
+                seconds: grokVideoSeconds,
+                quality: grokVideoQuality,
             });
             toast.success(result.message);
             if ((result.errors || []).length > 0) {
@@ -481,6 +489,50 @@ export default function IdeationPage() {
                                     {isGeneratingAssets ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Clapperboard className="w-4 h-4 mr-2" />}
                                     Generate via Grok2API
                                 </Button>
+                            </div>
+
+                            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-3">
+                                <div className="mb-3">
+                                    <p className="text-xs font-semibold text-foreground">Grok2API Output Settings</p>
+                                    <p className="text-[11px] text-muted-foreground">Pengaturan ini dipakai oleh tombol generate video via Grok2API.</p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground font-medium">Size</Label>
+                                        <select
+                                            value={grokVideoSize}
+                                            onChange={(e) => setGrokVideoSize(e.target.value)}
+                                            className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+                                        >
+                                            {VIDEO_SIZE_OPTIONS.map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground font-medium">Seconds</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={30}
+                                            value={grokVideoSeconds}
+                                            onChange={(e) => setGrokVideoSeconds(Math.max(1, Math.min(30, parseInt(e.target.value) || 6)))}
+                                            className="bg-background border-border h-9"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground font-medium">Quality</Label>
+                                        <select
+                                            value={grokVideoQuality}
+                                            onChange={(e) => setGrokVideoQuality(e.target.value)}
+                                            className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+                                        >
+                                            {VIDEO_QUALITY_OPTIONS.map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             {error && (

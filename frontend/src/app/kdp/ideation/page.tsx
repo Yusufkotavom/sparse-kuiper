@@ -15,6 +15,7 @@ import { toast } from "sonner";
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed Stable Diffusion / Midjourney prompts for KDP coloring books. Generate exactly {N} unique, non-repeating prompts for a coloring book featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Each prompt should describe a single, clear scene or character pose.`;
 const DEFAULT_PREFIX = "simple line art coloring page,";
 const DEFAULT_SUFFIX = "black and white outline only, no shading, no fill, clean white background, suitable for coloring book, KDP printable";
+const IMAGE_SIZE_OPTIONS = ["1024x1024", "1792x1024", "1024x1792", "1280x720", "720x1280"];
 
 export default function IdeationPage() {
     const router = useRouter();
@@ -37,6 +38,7 @@ export default function IdeationPage() {
     const [savedTemplates, setSavedTemplates] = useState<PromptTemplate[]>([]);
     const [whiskAccounts, setWhiskAccounts] = useState<Account[]>([]);
     const [whiskAccountId, setWhiskAccountId] = useState("whisk_default");
+    const [grokImageSize, setGrokImageSize] = useState("1024x1024");
 
     const workspaceDraft = useMemo(() => ({
         project: selectedProject || projectName || "Belum dipilih",
@@ -241,6 +243,7 @@ export default function IdeationPage() {
         try {
             const result = await kdpApi.generateWithGrok2Api(selectedProject, {
                 prompts: composedPrompts,
+                size: grokImageSize,
             });
             toast.success(result.message);
             if ((result.errors || []).length > 0) {
@@ -480,6 +483,27 @@ export default function IdeationPage() {
                                     {isGeneratingAssets ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImageIcon className="w-4 h-4 mr-2" />}
                                     Generate via Grok2API
                                 </Button>
+                            </div>
+
+                            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-3">
+                                <div className="mb-3">
+                                    <p className="text-xs font-semibold text-foreground">Grok2API Output Settings</p>
+                                    <p className="text-[11px] text-muted-foreground">Untuk image, saat ini yang dipakai adalah ukuran output.</p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground font-medium">Size</Label>
+                                        <select
+                                            value={grokImageSize}
+                                            onChange={(e) => setGrokImageSize(e.target.value)}
+                                            className="w-full bg-background border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus:border-primary"
+                                        >
+                                            {IMAGE_SIZE_OPTIONS.map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             {error && (
