@@ -103,3 +103,15 @@ class ConcatPreset(BaseModel):
     enable_audio_fade: bool = True
     audio_fade_duration: float = 2.0
     background_music_volume: int = 50
+
+
+class DatabaseFlushPayload(BaseModel):
+    confirm_text: str
+    clear_upload_queue: bool = True
+    clear_queue_files: bool = True
+    clear_generation_tasks: bool = True
+    clear_realtime_events: bool = True
+    clear_asset_metadata: bool = True
+    clear_project_configs: bool = True
+    clear_non_prompt_app_settings: bool = False
+    clear_accounts: bool = False

@@ -485,6 +485,18 @@ export interface TelegramSettings {
     has_chat_id: boolean;
 }
 
+export interface DatabaseFlushPayload {
+    confirm_text: string;
+    clear_upload_queue?: boolean;
+    clear_queue_files?: boolean;
+    clear_generation_tasks?: boolean;
+    clear_realtime_events?: boolean;
+    clear_asset_metadata?: boolean;
+    clear_project_configs?: boolean;
+    clear_non_prompt_app_settings?: boolean;
+    clear_accounts?: boolean;
+}
+
 /**
  * Settings / Prompt Management API Calls
  */
@@ -600,6 +612,13 @@ export const settingsApi = {
         return fetchApi<{ status: string; message: string }>("/settings/telegram/test", {
             method: "POST",
             body: JSON.stringify({ message }),
+        });
+    },
+
+    flushDatabase: async (payload: DatabaseFlushPayload): Promise<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number }> => {
+        return fetchApi<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number }>("/settings/maintenance/db/flush", {
+            method: "POST",
+            body: JSON.stringify(payload),
         });
     },
 
