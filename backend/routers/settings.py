@@ -3,7 +3,7 @@ from typing import List, Optional
 import json
 from pathlib import Path
 from sqlalchemy.orm import Session
-from backend.core.config import settings, CONFIG_FILE
+from backend.core.config import settings, CONFIG_FILE, UPLOAD_QUEUE_DIR, VIDEO_PROJECTS_DIR, PROJECTS_DIR
 from backend.core.database import get_db
 from backend.models.app_setting import AppSetting
 from backend.models.account import Account
