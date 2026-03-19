@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -11,10 +12,26 @@ from backend.core.config import settings
 
 
 def _base_url() -> str:
-    base = (settings.grok2api_base_url or "").strip().rstrip("/")
+    base = (settings.grok2api_base_url or "").strip()
     if not base:
         raise ValueError("GROK2API_BASE_URL is not configured.")
-    return base
+
+    if "://" not in base:
+        base = f"http://{base}"
+
+    parsed = urlparse(base)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("GROK2API_BASE_URL must use http:// or https:// scheme.")
+
+    return base.rstrip("/")
+
+
+def _api_url(path: str) -> str:
+    base = _base_url()
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    if base.endswith("/v1") and normalized_path.startswith("/v1/"):
+        normalized_path = normalized_path[3:]
+    return f"{base}{normalized_path}"
 
 
 def _headers() -> dict[str, str]:
@@ -63,7 +80,7 @@ def generate_images_to_dir(
 
         try:
             response = requests.post(
-                f"{_base_url()}/v1/images/generations",
+                _api_url("/v1/images/generations"),
                 headers=_headers(),
                 json=payload,
                 timeout=240,
@@ -120,7 +137,7 @@ def generate_videos_to_dir(
 
         try:
             response = requests.post(
-                f"{_base_url()}/v1/videos",
+                _api_url("/v1/videos"),
                 headers=_headers(),
                 json=payload,
                 timeout=600,
