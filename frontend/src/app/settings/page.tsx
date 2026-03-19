@@ -169,7 +169,6 @@ export default function SettingsPage() {
     const [dbFlushConfirm, setDbFlushConfirm] = useState("");
     const [dbFlushFlags, setDbFlushFlags] = useState({
         clear_upload_queue: true,
-        clear_queue_files: true,
         clear_generation_tasks: true,
         clear_realtime_events: true,
         clear_asset_metadata: true,
@@ -369,8 +368,7 @@ export default function SettingsPage() {
                 confirm_text: dbFlushConfirm,
                 ...dbFlushFlags,
             });
-            const removedFiles = typeof res.deleted_files === "number" ? ` Queue files removed: ${res.deleted_files}.` : "";
-            toast.success((res.message || "Database flush completed.") + removedFiles);
+            toast.success(res.message || "Database flush completed.");
             setDbFlushConfirm("");
         } catch (e) {
             console.error("Failed to flush database", e);
@@ -1813,7 +1811,6 @@ export default function SettingsPage() {
                                 <div className="grid gap-2 md:grid-cols-2">
                                     {[
                                         { key: "clear_upload_queue", label: "Clear upload queue jobs" },
-                                        { key: "clear_queue_files", label: "Clear physical queue files" },
                                         { key: "clear_generation_tasks", label: "Clear generation tasks" },
                                         { key: "clear_realtime_events", label: "Clear realtime events/log stream" },
                                         { key: "clear_asset_metadata", label: "Clear asset metadata cache" },
@@ -1839,7 +1836,6 @@ export default function SettingsPage() {
                                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-3 text-[11px] text-red-300 space-y-1">
                                     <p className="font-medium">Perhatian:</p>
                                     <p>- Aksi ini menghapus data permanen dari database.</p>
-                                    <p>- Secara default file fisik di folder queue juga ikut dibersihkan.</p>
                                     <p>- Secara default akun dan prompt template tetap aman.</p>
                                     <p>- Ketik FLUSH untuk mengaktifkan tombol eksekusi.</p>
                                 </div>

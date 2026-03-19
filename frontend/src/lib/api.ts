@@ -488,7 +488,6 @@ export interface TelegramSettings {
 export interface DatabaseFlushPayload {
     confirm_text: string;
     clear_upload_queue?: boolean;
-    clear_queue_files?: boolean;
     clear_generation_tasks?: boolean;
     clear_realtime_events?: boolean;
     clear_asset_metadata?: boolean;
@@ -615,8 +614,8 @@ export const settingsApi = {
         });
     },
 
-    flushDatabase: async (payload: DatabaseFlushPayload): Promise<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number }> => {
-        return fetchApi<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number }>("/settings/maintenance/db/flush", {
+    flushDatabase: async (payload: DatabaseFlushPayload): Promise<{ status: string; message: string; deleted: Record<string, number> }> => {
+        return fetchApi<{ status: string; message: string; deleted: Record<string, number> }>("/settings/maintenance/db/flush", {
             method: "POST",
             body: JSON.stringify(payload),
         });

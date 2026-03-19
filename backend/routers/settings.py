@@ -569,30 +569,6 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
         deleted[key] = int(count or 0)
         total_deleted += deleted[key]
 
-    deleted_files = 0
-    scanned_dirs: list[str] = []
-
-    def _clear_queue_files() -> int:
-        removed = 0
-        queue_dirs: list[Path] = [Path(UPLOAD_QUEUE_DIR)]
-        queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/queue"))
-        queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/*/queue"))
-        queue_dirs.extend(Path(PROJECTS_DIR).glob("*/queue"))
-
-        for qdir in queue_dirs:
-            if not qdir.exists() or not qdir.is_dir():
-                continue
-            scanned_dirs.append(str(qdir))
-            for fp in qdir.iterdir():
-                if not fp.is_file():
-                    continue
-                try:
-                    fp.unlink()
-                    removed += 1
-                except Exception as exc:
-                    logger.warning(f"Failed to remove queue file {fp}: {exc}")
-        return removed
-
     try:
         if req.clear_upload_queue:
             _delete(db.query(UploadQueueItem), "upload_queue")
@@ -613,9 +589,6 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
             _delete(db.query(Account), "accounts")
 
         db.commit()
-
-        if req.clear_queue_files:
-            deleted_files = _clear_queue_files()
     except Exception:
         db.rollback()
         raise
@@ -624,12 +597,9 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
         "status": "success",
         "message": f"Database flush completed. Deleted {total_deleted} row(s).",
         "deleted": deleted,
-        "deleted_files": deleted_files,
-        "scanned_queue_dirs": scanned_dirs,
         "preserved": {
             "accounts": not req.clear_accounts,
             "prompt_templates": True,
             "non_prompt_app_settings": not req.clear_non_prompt_app_settings,
-            "queue_files": not req.clear_queue_files,
         },
     }
