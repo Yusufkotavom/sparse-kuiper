@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/atoms/EmptyState";
 import { ViewToggle } from "@/components/atoms/ViewToggle";
 import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
-import { FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2, UploadCloud } from "lucide-react";
+import { Cpu, FolderOpen, RefreshCw, RotateCcw, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyProjectManagerCard, type ProjectType } from "@/components/organisms/ProjectManagerCard";
 import { ProjectManualUploadDialog } from "@/components/organisms/ProjectManualUploadDialog";
@@ -180,6 +180,10 @@ export default function ProjectOverviewPage() {
     router.push(projectType === "video" ? `/ideation?mode=video&project=${encodeURIComponent(name)}` : `/ideation?mode=image&project=${encodeURIComponent(name)}`);
   };
 
+  const goToGrok2ApiStudio = () => {
+    router.push(projectType === "video" ? "/grok2api-studio?mode=video" : "/grok2api-studio?mode=image");
+  };
+
   const goToCuration = () => {
     router.push(projectType === "video" ? `/curation?mode=video&project=${encodeURIComponent(name)}` : `/curation?mode=image&project=${encodeURIComponent(name)}`);
   };
@@ -336,6 +340,9 @@ export default function ProjectOverviewPage() {
             </Button>
             <Button onClick={goToIdeation} size="sm" variant="outline" className="border-border hover:bg-elevated">
               <Sparkles className="w-4 h-4 mr-1.5" /> Kembali ke Ideation
+            </Button>
+            <Button onClick={goToGrok2ApiStudio} size="sm" variant="outline" className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 hover:text-cyan-200">
+              <Cpu className="w-4 h-4 mr-1.5" /> Open Grok2API Studio
             </Button>
             <Button onClick={goToCuration} size="sm" variant="outline" className="border-border hover:bg-elevated">
               Kembali ke Curation

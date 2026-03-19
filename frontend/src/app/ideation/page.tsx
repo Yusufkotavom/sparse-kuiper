@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   BookOpen,
   Clapperboard,
+  Cpu,
   FolderOpen,
   Image as ImageIcon,
   Layers3,
@@ -79,6 +80,7 @@ function IdeationHubContent() {
   const curationHref = selectedProject ? `/curation?mode=${mode}&project=${encodeURIComponent(selectedProject)}` : `/curation?mode=${mode}`;
   const promptBuilderHref = mode === "video" ? "/video/ideation" : "/kdp/ideation";
   const generatorHref = mode === "video" ? "/video/creator-studio" : "/pipeline-templates";
+  const grokStudioHref = `/grok2api-studio?mode=${mode}`;
 
   const branches = useMemo<FlowHubBranch[]>(() => {
     if (mode === "video") {
@@ -103,6 +105,13 @@ function IdeationHubContent() {
           href: projectTargetHref,
           icon: FolderOpen,
           accent: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
+        },
+        {
+          title: "Grok2API Studio",
+          description: "Jalur cepat untuk text-to-video dan image-to-video lewat UI Grok2API yang tertanam di app.",
+          href: grokStudioHref,
+          icon: Cpu,
+          accent: "border-cyan-500/30 bg-cyan-500/10 text-cyan-200",
         },
         {
           title: "Runs",
@@ -137,6 +146,13 @@ function IdeationHubContent() {
         accent: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
       },
       {
+        title: "Grok2API Studio",
+        description: "Buka jalur generate image baru yang langsung memakai UI Grok2API dari dalam app.",
+        href: grokStudioHref,
+        icon: Cpu,
+        accent: "border-cyan-500/30 bg-cyan-500/10 text-cyan-200",
+      },
+      {
         title: "Curation Hub",
         description: "Lanjutkan ke pola review bersama sebelum masuk operasi harian atau generator berikutnya.",
         href: curationHref,
@@ -144,7 +160,7 @@ function IdeationHubContent() {
         accent: "border-amber-500/30 bg-amber-500/10 text-amber-200",
       },
     ];
-  }, [curationHref, generatorHref, mode, projectTargetHref, promptBuilderHref, runsHref]);
+  }, [curationHref, generatorHref, grokStudioHref, mode, projectTargetHref, promptBuilderHref, runsHref]);
 
   const createProject = async () => {
     const projectName = projectDraft.trim();
@@ -225,7 +241,14 @@ function IdeationHubContent() {
           href: runsHref,
           icon: BookOpen,
         },
+        {
+          title: "Grok2API Studio",
+          description: "Akses generator image dan video baru berbasis Grok2API tanpa keluar dari shell app.",
+          href: grokStudioHref,
+          icon: Cpu,
+        },
       ]}
+      footerColumns="sm:grid-cols-2 xl:grid-cols-4"
     />
   );
 }

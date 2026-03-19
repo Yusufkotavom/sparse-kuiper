@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { kdpApi, settingsApi, PromptTemplate, ProjectConfig, accountsApi, Account } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Loader2, Eye, EyeOff, Copy, CheckCheck } from "lucide-react";
+import { Wand2, Loader2, Copy, CheckCheck, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed Stable Diffusion / Midjourney prompts for KDP coloring books. Generate exactly {N} unique, non-repeating prompts for a coloring book featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Each prompt should describe a single, clear scene or character pose.`;
@@ -443,6 +443,16 @@ export default function IdeationPage() {
                                 >
                                     Save to Project
                                 </Button>
+                                <Link
+                                    href={`/grok2api-studio?mode=image`}
+                                    className={buttonVariants({
+                                        variant: "outline",
+                                        className: "border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/5 h-10 font-bold px-6 w-full sm:w-auto",
+                                    })}
+                                >
+                                    <ImageIcon className="w-4 h-4 mr-2" />
+                                    Open Grok2API
+                                </Link>
                             </div>
 
                             {error && (
@@ -515,6 +525,13 @@ export default function IdeationPage() {
                             Next step untuk <span className="font-semibold text-foreground">{selectedProject}</span>: lanjutkan ke curation atau buka detail project.
                         </p>
                         <div className="flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/grok2api-studio?mode=image`)}
+                            >
+                                Open Grok2API Studio
+                            </Button>
                             <Button
                                 size="sm"
                                 variant="outline"

@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { videoApi, settingsApi, PromptTemplate, ProjectConfig, accountsApi, Account } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Loader2, Eye, EyeOff, Copy, CheckCheck, FileText } from "lucide-react";
+import { Wand2, Loader2, Copy, CheckCheck, FileText, Clapperboard } from "lucide-react";
 import { toast } from "sonner";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert prompt engineer specializing in creating detailed visual prompts for AI video generation (like Grok or Sora). Generate exactly {N} unique, non-repeating prompts for a video sequence featuring {CHARACTER}. Each prompt should be on its own line, numbered 1 through {N}. Describe camera movement, lighting, subject action, and environment clearly.`;
@@ -444,6 +444,16 @@ export default function IdeationPage() {
                                 >
                                     Save to Project
                                 </Button>
+                                <Link
+                                    href={`/grok2api-studio?mode=video`}
+                                    className={buttonVariants({
+                                        variant: "outline",
+                                        className: "border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/5 h-10 font-bold px-6 w-full sm:w-auto",
+                                    })}
+                                >
+                                    <Clapperboard className="w-4 h-4 mr-2" />
+                                    Open Grok2API
+                                </Link>
                             </div>
 
                             {error && (
@@ -516,6 +526,13 @@ export default function IdeationPage() {
                             Next step untuk <span className="font-semibold text-foreground">{selectedProject}</span>: lanjutkan ke curation atau buka detail project.
                         </p>
                         <div className="flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/grok2api-studio?mode=video`)}
+                            >
+                                Open Grok2API Studio
+                            </Button>
                             <Button
                                 size="sm"
                                 variant="outline"
