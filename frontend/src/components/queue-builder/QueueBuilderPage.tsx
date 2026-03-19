@@ -867,9 +867,17 @@ function QueueBuilderContent() {
                                         {scheduleEnabled ? 'Scheduled Job Active' : 'Schedule for Later (Optional)'}
                                     </Button>
 
+                                    <div className="rounded-lg border border-border bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+                                        <p className="font-medium text-foreground">Info schedule</p>
+                                        <p>• <span className="text-foreground">Job Schedule</span> = kapan worker mulai proses upload.</p>
+                                        <p>• <span className="text-foreground">Social Media Schedule</span> = jadwal publish native di platform.</p>
+                                        <p>• Saat ini UI masih menyamakan keduanya. Setting schedule platform terpisah belum tersedia di form ini.</p>
+                                    </div>
+
                                     {scheduleEnabled && (
                                         <div className="space-y-3 pl-1">
-                                            <div>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                <div>
                                                 <p className="text-[10px] text-muted-foreground mb-1">Start Date (UTC+0) · Must be 20 min – 10 days in the future</p>
                                                 <DatePicker
                                                     selected={scheduleDate}
@@ -886,6 +894,14 @@ function QueueBuilderContent() {
                                                     minDate={new Date()}
                                                 popperClassName="datepicker-popper-high"
                                                 />
+                                                </div>
+                                                <div className="rounded-lg border border-amber-900/30 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-200/90">
+                                                    <p className="font-medium text-amber-100">Social Media Schedule</p>
+                                                    <p className="mt-1">
+                                                        Belum ada field khusus per-platform di UI ini.
+                                                        Untuk sekarang, jadwal social media akan mengikuti Job Schedule di atas.
+                                                    </p>
+                                                </div>
                                             </div>
                                             
                                             {selectedFiles.length > 1 && (

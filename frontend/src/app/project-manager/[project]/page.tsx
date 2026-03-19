@@ -685,12 +685,15 @@ export default function ProjectOverviewPage() {
                   for (const rel of files) {
                     const base = (rel.split("/").pop() || "").replace(/\.[^\.]+$/, "");
                     const seed = metaByFile[rel];
+                    const latest = await queueBuilderApi
+                      .getAssetMetadata(projectType, rel)
+                      .catch(() => ({ title: "", description: "", tags: "" }));
                     const gen = await queueBuilderApi.generateAssetMetadata({
                       project_type: projectType,
                       file: rel,
-                      title: seed?.title || "",
-                      description: seed?.description || "",
-                      tags: seed?.tags || "",
+                      title: latest.title || seed?.title || "",
+                      description: latest.description || seed?.description || "",
+                      tags: latest.tags || seed?.tags || "",
                     }).catch(() => ({ title: base, description: `Asset from project ${name}`, tags: projectType === "video" ? "#video" : "#image" }));
                     await queueBuilderApi.setAssetMetadata(projectType, rel, { title: gen.title, description: gen.description, tags: gen.tags });
                     updated++;
