@@ -488,20 +488,12 @@ export interface TelegramSettings {
 export interface DatabaseFlushPayload {
     confirm_text: string;
     clear_upload_queue?: boolean;
-    clear_queue_files?: boolean;
     clear_generation_tasks?: boolean;
     clear_realtime_events?: boolean;
     clear_asset_metadata?: boolean;
     clear_project_configs?: boolean;
     clear_non_prompt_app_settings?: boolean;
     clear_accounts?: boolean;
-}
-
-export interface LocalQueueForceRemovePayload {
-    confirm_text: string;
-    filename: string;
-    remove_from_disk?: boolean;
-    remove_from_db?: boolean;
 }
 
 /**
@@ -622,23 +614,11 @@ export const settingsApi = {
         });
     },
 
-    flushDatabase: async (payload: DatabaseFlushPayload): Promise<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number; failed_queue_files?: string[] }> => {
-        return fetchApi<{ status: string; message: string; deleted: Record<string, number>; deleted_files?: number; failed_queue_files?: string[] }>("/settings/maintenance/db/flush", {
+    flushDatabase: async (payload: DatabaseFlushPayload): Promise<{ status: string; message: string; deleted: Record<string, number> }> => {
+        return fetchApi<{ status: string; message: string; deleted: Record<string, number> }>("/settings/maintenance/db/flush", {
             method: "POST",
             body: JSON.stringify(payload),
         });
-    },
-
-    forceRemoveQueueItem: async (
-        payload: LocalQueueForceRemovePayload
-    ): Promise<{ status: string; message: string; removed_files: string[]; failed_files: string[]; deleted_upload_queue_rows: number; deleted_asset_metadata_rows: number }> => {
-        return fetchApi<{ status: string; message: string; removed_files: string[]; failed_files: string[]; deleted_upload_queue_rows: number; deleted_asset_metadata_rows: number }>(
-            "/settings/maintenance/queue/force-remove",
-            {
-                method: "POST",
-                body: JSON.stringify(payload),
-            }
-        );
     },
 
     createTemplate: async (template: PromptTemplate): Promise<{ status: string; message: string }> => {
