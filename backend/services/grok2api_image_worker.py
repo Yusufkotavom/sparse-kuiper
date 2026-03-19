@@ -43,6 +43,9 @@ def main() -> int:
             len(result["created"]),
             len(result["errors"]),
         )
+        if result["errors"]:
+            preview_errors = "; ".join(result["errors"][:3])
+            logger.error("[Grok2API Image Worker] Error preview project=%s: %s", project_name, preview_errors)
         return 0
     except Exception as exc:
         logger.exception("[Grok2API Image Worker] Failed: %s", exc)
