@@ -6,6 +6,12 @@ from sqlalchemy.orm import Session
 from backend.core.config import settings, CONFIG_FILE
 from backend.core.database import get_db
 from backend.models.app_setting import AppSetting
+from backend.models.account import Account
+from backend.models.asset_metadata import AssetMetadata
+from backend.models.generation_task import GenerationTask
+from backend.models.project_config import ProjectConfig
+from backend.models.realtime_event import RealtimeEvent
+from backend.models.upload_queue import UploadQueueItem
 from backend.routers.settings_schemas import (
     TemplatePayload,
     TemplateUpdatePayload,
@@ -18,6 +24,7 @@ from backend.routers.settings_schemas import (
     AzureOpenAIPayload,
     TelegramSettingsPayload,
     TelegramTestPayload,
+    DatabaseFlushPayload,
 )
 from backend.services.telegram_notifier import send_telegram_message
 
@@ -545,3 +552,54 @@ async def test_telegram_settings(req: TelegramTestPayload):
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to send Telegram message. Check enabled state, bot token, and chat ID.")
     return {"status": "success", "message": "Telegram test message sent."}
+
+
+@router.post("/maintenance/db/flush")
+async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db)):
+    confirm = (req.confirm_text or "").strip().upper()
+    if confirm != "FLUSH":
+        raise HTTPException(status_code=400, detail="Invalid confirmation text. Type FLUSH to continue.")
+
+    deleted: dict[str, int] = {}
+    total_deleted = 0
+
+    def _delete(query, key: str) -> None:
+        nonlocal total_deleted
+        count = query.delete(synchronize_session=False)
+        deleted[key] = int(count or 0)
+        total_deleted += deleted[key]
+
+    try:
+        if req.clear_upload_queue:
+            _delete(db.query(UploadQueueItem), "upload_queue")
+        if req.clear_generation_tasks:
+            _delete(db.query(GenerationTask), "generation_task")
+        if req.clear_realtime_events:
+            _delete(db.query(RealtimeEvent), "realtime_event")
+        if req.clear_asset_metadata:
+            _delete(db.query(AssetMetadata), "asset_metadata")
+        if req.clear_project_configs:
+            _delete(db.query(ProjectConfig), "project_config")
+        if req.clear_non_prompt_app_settings:
+            _delete(
+                db.query(AppSetting).filter(AppSetting.setting_type != TEMPLATE_SETTING_TYPE),
+                "app_settings_non_prompt",
+            )
+        if req.clear_accounts:
+            _delete(db.query(Account), "accounts")
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "status": "success",
+        "message": f"Database flush completed. Deleted {total_deleted} row(s).",
+        "deleted": deleted,
+        "preserved": {
+            "accounts": not req.clear_accounts,
+            "prompt_templates": True,
+            "non_prompt_app_settings": not req.clear_non_prompt_app_settings,
+        },
+    }
