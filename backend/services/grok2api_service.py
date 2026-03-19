@@ -70,50 +70,31 @@ def _extract_video_url(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _download_video_bytes(video_url: str, *, session: requests.Session | None = None) -> bytes:
+def _download_video_bytes(video_url: str) -> bytes:
     normalized_url = (video_url or "").strip()
     if not normalized_url:
         raise RuntimeError("Empty video URL.")
     if normalized_url.startswith("/"):
         normalized_url = _api_url(normalized_url)
 
-    http = session or requests
     errors: list[str] = []
 
     # 1) Direct download, in case URL is a signed public asset.
     try:
-        direct_response = http.get(normalized_url, timeout=600)
+        direct_response = requests.get(normalized_url, timeout=600)
         direct_response.raise_for_status()
         return direct_response.content
     except Exception as exc:
         errors.append(f"direct: {exc}")
 
-    # 2) Browser-like headers, some asset CDNs block "generic bot" requests.
-    browser_headers: dict[str, str] = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/123.0.0.0 Safari/537.36"
-        ),
-        "Accept": "video/*,*/*;q=0.9",
-        "Referer": _base_url(),
-    }
-    try:
-        browser_response = http.get(normalized_url, headers=browser_headers, timeout=600)
-        browser_response.raise_for_status()
-        return browser_response.content
-    except Exception as exc:
-        errors.append(f"browser_headers: {exc}")
-
-    # 3) Authenticated download, some providers require bearer token for asset URLs.
+    # 2) Authenticated download, some providers require bearer token for asset URLs.
     auth_headers: dict[str, str] = {}
     api_key = (settings.grok2api_api_key or "").strip()
     if api_key:
         auth_headers["Authorization"] = f"Bearer {api_key}"
     if auth_headers:
-        auth_headers.update(browser_headers)
         try:
-            auth_response = http.get(normalized_url, headers=auth_headers, timeout=600)
+            auth_response = requests.get(normalized_url, headers=auth_headers, timeout=600)
             auth_response.raise_for_status()
             return auth_response.content
         except Exception as exc:
@@ -209,22 +190,21 @@ def generate_videos_to_dir(
             payload["image_reference"] = {"image_url": image_url}
 
         try:
-            with requests.Session() as session:
-                response = session.post(
-                    _api_url("/v1/videos"),
-                    headers=_headers(),
-                    json=payload,
-                    timeout=600,
-                )
-                if not response.ok:
-                    raise RuntimeError(_error_text(response))
+            response = requests.post(
+                _api_url("/v1/videos"),
+                headers=_headers(),
+                json=payload,
+                timeout=600,
+            )
+            if not response.ok:
+                raise RuntimeError(_error_text(response))
 
-                data = response.json()
-                video_url = _extract_video_url(data)
-                if not video_url:
-                    raise RuntimeError("Response did not contain downloadable video URL.")
+            data = response.json()
+            video_url = _extract_video_url(data)
+            if not video_url:
+                raise RuntimeError("Response did not contain downloadable video URL.")
 
-                video_bytes = _download_video_bytes(video_url, session=session)
+            video_bytes = _download_video_bytes(video_url)
 
             filename = _safe_filename("grok2api-video", index, ".mp4")
             out_path = output_dir / filename

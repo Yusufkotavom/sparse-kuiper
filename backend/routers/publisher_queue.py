@@ -721,6 +721,7 @@ async def update_queue_config(request: QueueConfigRequest, db: Session = Depends
         "youtube_category_id": request.youtube_category_id,
         "product_id": request.product_id,
         "platform_publish_schedule": request.platform_publish_schedule or "",
+        "platform_publish_schedule_map": request.platform_publish_schedule_map or {},
         "campaign_id": request.campaign_id or prev_options.get("campaign_id", ""),
     }
     try:
@@ -759,6 +760,7 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
             "youtube_category_id": request.youtube_category_id,
             "product_id": request.product_id,
             "platform_publish_schedule": "",
+            "platform_publish_schedule_map": request.platform_publish_schedule_map_start or {},
             "campaign_id": campaign_id,
         }
         if start_dt:

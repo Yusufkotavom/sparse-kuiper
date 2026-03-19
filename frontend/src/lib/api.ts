@@ -811,6 +811,7 @@ export const publisherApi = {
         account_map: Record<string, string>;
         schedule?: string;
         platform_publish_schedule?: string;
+        platform_publish_schedule_map?: Record<string, string>;
         campaign_id?: string;
         open_browser?: boolean;
         pw_debug?: boolean;
@@ -830,6 +831,7 @@ export const publisherApi = {
         account_map: Record<string, string>;
         schedule_start?: string;
         platform_publish_schedule_start?: string;
+        platform_publish_schedule_map_start?: Record<string, string>;
         campaign_id?: string;
         posts_per_day?: number;
         time_gap_hours?: number;
