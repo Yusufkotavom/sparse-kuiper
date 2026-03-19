@@ -89,6 +89,7 @@ class QueueConfigRequest(BaseModel):
     account_map: Dict[str, str] = {}
     schedule: str = ""
     platform_publish_schedule: str = ""
+    platform_publish_schedule_map: Dict[str, str] = {}
     campaign_id: str = ""
     open_browser: bool = False
     pw_debug: bool = False
@@ -103,6 +104,7 @@ class BulkQueueConfigRequest(BaseModel):
     account_map: Dict[str, str] = {}
     schedule_start: str = ""
     platform_publish_schedule_start: str = ""
+    platform_publish_schedule_map_start: Dict[str, str] = {}
     campaign_id: str = ""
     posts_per_day: int = 1
     time_gap_hours: int = 1

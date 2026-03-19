@@ -33,6 +33,15 @@ type QueueItem = {
     scheduled_at?: string | null;
     last_error?: string | null;
 };
+type PlatformKey = "tiktok" | "youtube" | "instagram" | "facebook";
+type PlatformScheduleState = Record<PlatformKey, Date | null>;
+
+const PLATFORM_LABELS: Record<PlatformKey, string> = {
+    tiktok: "TikTok",
+    youtube: "YouTube",
+    instagram: "Instagram",
+    facebook: "Facebook",
+};
 
 function QueueBuilderContent() {
     const searchParams = useSearchParams();
@@ -46,7 +55,7 @@ function QueueBuilderContent() {
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [tags, setTags] = useState("");
-    const [platforms, setPlatforms] = useState({
+    const [platforms, setPlatforms] = useState<Record<PlatformKey, boolean>>({
         tiktok: false, youtube: false, instagram: false, facebook: false
     });
 
@@ -63,6 +72,12 @@ function QueueBuilderContent() {
     // Schedule & product
     const [scheduleEnabled, setScheduleEnabled] = useState(false);
     const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
+    const [platformScheduleDates, setPlatformScheduleDates] = useState<PlatformScheduleState>({
+        tiktok: null,
+        youtube: null,
+        instagram: null,
+        facebook: null,
+    });
     const [postsPerDay, setPostsPerDay] = useState<number>(3);
     const [timeGapHours, setTimeGapHours] = useState<number>(4);
     const [productId, setProductId] = useState("");
@@ -138,6 +153,13 @@ function QueueBuilderContent() {
             return state === "failed" || state === "completed_with_errors";
         }).length,
         [queue]
+    );
+    const selectedPlatforms = useMemo(
+        () =>
+            (Object.entries(platforms)
+                .filter(([, enabled]) => enabled)
+                .map(([platform]) => platform)) as PlatformKey[],
+        [platforms]
     );
 
     useEffect(() => {
@@ -246,16 +268,20 @@ function QueueBuilderContent() {
     const facebookAccounts = accounts.filter(a => a.platform === "facebook");
     const instagramAccounts = accounts.filter(a => a.platform === "instagram");
 
-    const handlePlatformToggle = (platform: keyof typeof platforms) => {
-        setPlatforms(prev => ({ ...prev, [platform]: !prev[platform] }));
+    const handlePlatformToggle = (platform: PlatformKey) => {
+        setPlatforms(prev => {
+            const nextEnabled = !prev[platform];
+            if (!nextEnabled) {
+                setPlatformScheduleDates((prevDates) => ({ ...prevDates, [platform]: null }));
+            } else if (scheduleDate) {
+                setPlatformScheduleDates((prevDates) => ({ ...prevDates, [platform]: prevDates[platform] ?? scheduleDate }));
+            }
+            return { ...prev, [platform]: nextEnabled };
+        });
     };
 
     const handlePublish = async () => {
         if (selectedFiles.length === 0) return;
-
-        const selectedPlatforms = Object.entries(platforms)
-            .filter(([, v]) => v)
-            .map(([p]) => p as keyof typeof platforms);
 
         if (selectedPlatforms.length === 0) {
             toast.error("Please select at least one platform.");
@@ -293,6 +319,17 @@ function QueueBuilderContent() {
             }
             scheduleIso = scheduleDate.toISOString();
         }
+        const platformPublishScheduleMap = selectedPlatforms.reduce<Record<string, string>>((acc, platform) => {
+            if (!scheduleEnabled) return acc;
+            const platformDate = platformScheduleDates[platform] || scheduleDate;
+            if (platformDate) {
+                acc[platform] = platformDate.toISOString();
+            }
+            return acc;
+        }, {});
+        const primaryPlatformScheduleIso = selectedPlatforms.length > 0
+            ? (platformPublishScheduleMap[selectedPlatforms[0]] || scheduleIso)
+            : scheduleIso;
 
         setIsUploading(true);
         try {
@@ -307,7 +344,8 @@ function QueueBuilderContent() {
                     platforms: selectedPlatforms,
                     account_map: accountMap,
                     schedule: scheduleIso,
-                    platform_publish_schedule: scheduleIso,
+                    platform_publish_schedule: primaryPlatformScheduleIso,
+                    platform_publish_schedule_map: platformPublishScheduleMap,
                     product_id: productId,
                     youtube_privacy: youtubePrivacy,
                     youtube_category_id: youtubeCategoryId,
@@ -377,7 +415,8 @@ function QueueBuilderContent() {
                     platforms: selectedPlatforms,
                     account_map: accountMap,
                     schedule_start: scheduleIso,
-                    platform_publish_schedule_start: scheduleIso,
+                    platform_publish_schedule_start: primaryPlatformScheduleIso,
+                    platform_publish_schedule_map_start: platformPublishScheduleMap,
                     posts_per_day: postsPerDay,
                     time_gap_hours: timeGapHours,
                     product_id: productId,
@@ -871,7 +910,7 @@ function QueueBuilderContent() {
                                         <p className="font-medium text-foreground">Info schedule</p>
                                         <p>• <span className="text-foreground">Job Schedule</span> = kapan worker mulai proses upload.</p>
                                         <p>• <span className="text-foreground">Social Media Schedule</span> = jadwal publish native di platform.</p>
-                                        <p>• Saat ini UI masih menyamakan keduanya. Setting schedule platform terpisah belum tersedia di form ini.</p>
+                                        <p>• Sekarang Anda bisa atur schedule social media per platform (opsional). Jika kosong, sistem akan pakai Job Schedule.</p>
                                     </div>
 
                                     {scheduleEnabled && (
@@ -896,13 +935,36 @@ function QueueBuilderContent() {
                                                 />
                                                 </div>
                                                 <div className="rounded-lg border border-amber-900/30 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-200/90">
-                                                    <p className="font-medium text-amber-100">Social Media Schedule</p>
-                                                    <p className="mt-1">
-                                                        Belum ada field khusus per-platform di UI ini.
-                                                        Untuk sekarang, jadwal social media akan mengikuti Job Schedule di atas.
-                                                    </p>
+                                                    <p className="font-medium text-amber-100">Social Media Schedule (Per Platform)</p>
+                                                    <p className="mt-1">Opsional. Kalau tidak diisi, tiap platform akan mengikuti Job Schedule.</p>
                                                 </div>
                                             </div>
+                                            {selectedPlatforms.length > 0 && (
+                                                <div className="grid grid-cols-1 gap-3 border-t border-zinc-800/50 pt-2 sm:grid-cols-2">
+                                                    {selectedPlatforms.map((platformKey) => (
+                                                        <div key={platformKey} className="space-y-1">
+                                                            <Label className="text-[10px] text-muted-foreground block">
+                                                                {PLATFORM_LABELS[platformKey]} Publish Schedule (optional)
+                                                            </Label>
+                                                            <DatePicker
+                                                                selected={platformScheduleDates[platformKey]}
+                                                                onChange={(date: Date | null) => setPlatformScheduleDates((prev) => ({ ...prev, [platformKey]: date }))}
+                                                                showMonthDropdown
+                                                                showYearDropdown
+                                                                dropdownMode="select"
+                                                                showTimeSelect
+                                                                timeIntervals={15}
+                                                                dateFormat="MM/dd/yyyy HH:mm"
+                                                                placeholderText="Follow Job Schedule"
+                                                                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-amber-300 outline-none focus:border-primary"
+                                                                wrapperClassName="w-full"
+                                                                minDate={new Date()}
+                                                                popperClassName="datepicker-popper-high"
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                             
                                             {selectedFiles.length > 1 && (
                                                 <div className="grid grid-cols-1 gap-3 border-t border-zinc-800/50 pt-2 sm:grid-cols-2">
