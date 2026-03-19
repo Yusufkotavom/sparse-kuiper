@@ -255,6 +255,7 @@ async def delete_from_queue(filename: str, db: Session = Depends(get_db)):
 
 @router.post("/queue/add")
 async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
+    project_name = ""
     if request.project_type == "video":
         src_path = VIDEO_PROJECTS_DIR / request.relative_path
     elif request.project_type == "kdp":
@@ -313,14 +314,85 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
         item = UploadQueueItem(filename=dest_filename)
         db.add(item)
 
+    resolved_title = (request.title or "").strip()
+    resolved_description = (request.description or "").strip()
+    resolved_tags = (request.tags or "").strip()
+
+    try:
+        existing_meta = (
+            db.query(AssetMetadata)
+            .filter(
+                AssetMetadata.project_type == request.project_type,
+                AssetMetadata.project_name == project_name,
+                AssetMetadata.filename == filename,
+            )
+            .first()
+        )
+    except Exception:
+        existing_meta = None
+
+    if existing_meta:
+        if not resolved_title:
+            resolved_title = (existing_meta.title or "").strip()
+        if not resolved_description:
+            resolved_description = (existing_meta.description or "").strip()
+        if not resolved_tags:
+            resolved_tags = (existing_meta.tags or "").strip()
+
+    if not (resolved_title and resolved_description and resolved_tags):
+        try:
+            sidecar_path = origin_dir / f"{Path(filename).stem}.meta.json"
+            if sidecar_path.exists():
+                with open(sidecar_path, "r", encoding="utf-8") as sf:
+                    loaded = json.load(sf)
+                    sidecar = loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            sidecar = {}
+        if not resolved_title:
+            resolved_title = (sidecar.get("title") or "").strip()
+        if not resolved_description:
+            resolved_description = (sidecar.get("description") or "").strip()
+        if not resolved_tags:
+            resolved_tags = (sidecar.get("tags") or "").strip()
+
+    if not resolved_title:
+        resolved_title = Path(dest_filename).stem
+    if not resolved_description:
+        resolved_description = f"Uploaded from project {project_name or request.project_type}"
+    if not resolved_tags:
+        resolved_tags = "#video" if request.project_type == "video" else "#image"
+
     item.status = "pending"
     item.worker_state = "pending"
-    item.title = request.title
-    item.description = request.description
-    item.tags = request.tags
+    item.title = resolved_title
+    item.description = resolved_description
+    item.tags = resolved_tags
     item.platforms = {}
     item.file_path = str(dest_path)
     item.project_dir = str(origin_dir)
+
+    queue_meta = (
+        db.query(AssetMetadata)
+        .filter(
+            AssetMetadata.project_type == request.project_type,
+            AssetMetadata.project_name == project_name,
+            AssetMetadata.canonical_dir == "queue",
+            AssetMetadata.filename == dest_filename,
+        )
+        .first()
+    )
+    if not queue_meta:
+        queue_meta = AssetMetadata(
+            project_type=request.project_type,
+            project_name=project_name,
+            canonical_dir="queue",
+            filename=dest_filename,
+        )
+        db.add(queue_meta)
+    queue_meta.title = resolved_title
+    queue_meta.description = resolved_description
+    queue_meta.tags = resolved_tags
+
     _publish_queue_event(db, item, "upserted")
     db.commit()
 
@@ -328,9 +400,9 @@ async def add_to_queue(request: QueueAddRequest, db: Session = Depends(get_db)):
         sidecar_path = origin_dir / f"{Path(dest_filename).stem}.meta.json"
         with open(sidecar_path, "w", encoding="utf-8") as sf:
             json.dump({
-                "title": request.title,
-                "description": request.description,
-                "tags": request.tags,
+                "title": resolved_title,
+                "description": resolved_description,
+                "tags": resolved_tags,
             }, sf, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"[Queue Add] Failed writing sidecar metadata: {e}")

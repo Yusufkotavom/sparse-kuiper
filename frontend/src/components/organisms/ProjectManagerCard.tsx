@@ -108,12 +108,13 @@ export function LazyProjectManagerCard({
     await runAction(
       "generate",
       async () => {
+        const latest = await queueBuilderApi.getAssetMetadata(projectType, file).catch(() => ({ title: "", description: "", tags: "" }));
         const gen = await queueBuilderApi.generateAssetMetadata({
           project_type: projectType,
           file,
-          title: prefetchedMeta?.title || queueStatus?.metadata?.title || "",
-          description: prefetchedMeta?.description || queueStatus?.metadata?.description || "",
-          tags: prefetchedMeta?.tags || queueStatus?.metadata?.tags || "",
+          title: latest.title || prefetchedMeta?.title || queueStatus?.metadata?.title || "",
+          description: latest.description || prefetchedMeta?.description || queueStatus?.metadata?.description || "",
+          tags: latest.tags || prefetchedMeta?.tags || queueStatus?.metadata?.tags || "",
         }).catch(() => ({ title: fileName.replace(/\.[^\.]+$/, ""), description: `Asset from project ${projectName}`, tags: "#content" }));
         await queueBuilderApi.setAssetMetadata(projectType, file, { title: gen.title, description: gen.description, tags: gen.tags });
       },
