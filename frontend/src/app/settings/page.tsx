@@ -166,6 +166,25 @@ export default function SettingsPage() {
     const [isSavingTelegram, setIsSavingTelegram] = useState(false);
     const [telegramSaved, setTelegramSaved] = useState(false);
     const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+    const [dbFlushConfirm, setDbFlushConfirm] = useState("");
+    const [dbFlushFlags, setDbFlushFlags] = useState({
+        clear_upload_queue: true,
+        clear_queue_files: true,
+        clear_generation_tasks: true,
+        clear_realtime_events: true,
+        clear_asset_metadata: true,
+        clear_project_configs: true,
+        clear_non_prompt_app_settings: false,
+        clear_accounts: false,
+    });
+    const [isFlushingDb, setIsFlushingDb] = useState(false);
+    const [forceRemoveFilename, setForceRemoveFilename] = useState("");
+    const [forceRemoveConfirm, setForceRemoveConfirm] = useState("");
+    const [forceRemoveFlags, setForceRemoveFlags] = useState({
+        remove_from_disk: true,
+        remove_from_db: true,
+    });
+    const [isForceRemoving, setIsForceRemoving] = useState(false);
 
     useEffect(() => {
         loadTemplates();
@@ -343,6 +362,64 @@ export default function SettingsPage() {
             toast.error(e instanceof Error ? e.message : "Failed to save Azure OpenAI settings");
         } finally {
             setIsSavingAzure(false);
+        }
+    };
+
+    const handleFlushDatabase = async () => {
+        if (dbFlushConfirm.trim().toUpperCase() !== "FLUSH") {
+            toast.error("Ketik FLUSH untuk konfirmasi.");
+            return;
+        }
+        setIsFlushingDb(true);
+        try {
+            const res = await settingsApi.flushDatabase({
+                confirm_text: dbFlushConfirm,
+                ...dbFlushFlags,
+            });
+            const removedFiles = typeof res.deleted_files === "number" ? ` Queue files removed: ${res.deleted_files}.` : "";
+            const failedFiles = Array.isArray(res.failed_queue_files) ? res.failed_queue_files.length : 0;
+            if (failedFiles > 0) {
+                toast.error(`${res.message || "Database flush completed with warnings."}${removedFiles} Failed to remove ${failedFiles} queue file(s).`);
+            } else {
+                toast.success((res.message || "Database flush completed.") + removedFiles);
+            }
+            setDbFlushConfirm("");
+        } catch (e) {
+            console.error("Failed to flush database", e);
+            toast.error(e instanceof Error ? e.message : "Failed to flush database");
+        } finally {
+            setIsFlushingDb(false);
+        }
+    };
+
+    const handleForceRemoveQueueItem = async () => {
+        if (!forceRemoveFilename.trim()) {
+            toast.error("Isi filename queue yang ingin dihapus paksa.");
+            return;
+        }
+        if (forceRemoveConfirm.trim().toUpperCase() !== "FLUSH") {
+            toast.error("Ketik FLUSH untuk konfirmasi force remove.");
+            return;
+        }
+        setIsForceRemoving(true);
+        try {
+            const res = await settingsApi.forceRemoveQueueItem({
+                confirm_text: forceRemoveConfirm,
+                filename: forceRemoveFilename.trim(),
+                ...forceRemoveFlags,
+            });
+            const failed = Array.isArray(res.failed_files) ? res.failed_files.length : 0;
+            if (failed > 0) {
+                toast.error(`${res.message} Removed files: ${res.removed_files?.length || 0}. Failed files: ${failed}.`);
+            } else {
+                toast.success(`${res.message} DB rows: ${res.deleted_upload_queue_rows}. Files: ${res.removed_files?.length || 0}.`);
+            }
+            setForceRemoveConfirm("");
+        } catch (e) {
+            console.error("Failed to force remove queue item", e);
+            toast.error(e instanceof Error ? e.message : "Failed to force remove queue item");
+        } finally {
+            setIsForceRemoving(false);
         }
     };
 
@@ -1022,6 +1099,7 @@ export default function SettingsPage() {
                                 </div>
                             </CardContent>
                         </Card>
+
                     </div>
                 )}
 
@@ -1765,6 +1843,129 @@ export default function SettingsPage() {
                                     Nilai di atas dibaca saat build. Override client API base URL di section AI & API
                                     jika perlu pointing ke backend berbeda untuk browser ini.
                                 </p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-surface border-border">
+                            <CardHeader>
+                                <CardTitle className="text-sm">Database Control (Danger Zone)</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Bersihkan data operasional DB tanpa menyentuh akun/prompt, kecuali jika Anda centang opsinya.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    {[
+                                        { key: "clear_upload_queue", label: "Clear upload queue jobs" },
+                                        { key: "clear_queue_files", label: "Clear physical queue files" },
+                                        { key: "clear_generation_tasks", label: "Clear generation tasks" },
+                                        { key: "clear_realtime_events", label: "Clear realtime events/log stream" },
+                                        { key: "clear_asset_metadata", label: "Clear asset metadata cache" },
+                                        { key: "clear_project_configs", label: "Clear project config runtime" },
+                                        { key: "clear_non_prompt_app_settings", label: "Clear non-prompt app settings" },
+                                        { key: "clear_accounts", label: "Clear accounts (danger)" },
+                                    ].map((opt) => (
+                                        <div
+                                            key={opt.key}
+                                            className="rounded-lg border border-border bg-background/40 px-3 py-2 flex items-center justify-between gap-3"
+                                        >
+                                            <Label className="text-xs text-foreground">{opt.label}</Label>
+                                            <Switch
+                                                checked={dbFlushFlags[opt.key as keyof typeof dbFlushFlags]}
+                                                onCheckedChange={(checked) =>
+                                                    setDbFlushFlags((prev) => ({ ...prev, [opt.key]: checked }))
+                                                }
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-3 text-[11px] text-red-300 space-y-1">
+                                    <p className="font-medium">Perhatian:</p>
+                                    <p>- Aksi ini menghapus data permanen dari database.</p>
+                                    <p>- Secara default file fisik di folder queue juga ikut dibersihkan.</p>
+                                    <p>- Secara default akun dan prompt template tetap aman.</p>
+                                    <p>- Ketik FLUSH untuk mengaktifkan tombol eksekusi.</p>
+                                </div>
+
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <Input
+                                        value={dbFlushConfirm}
+                                        onChange={(e) => setDbFlushConfirm(e.target.value)}
+                                        placeholder="Type FLUSH to confirm"
+                                        className="bg-background border-border text-xs sm:max-w-xs"
+                                    />
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        disabled={isFlushingDb || dbFlushConfirm.trim().toUpperCase() !== "FLUSH"}
+                                        onClick={handleFlushDatabase}
+                                    >
+                                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                                        {isFlushingDb ? "Flushing..." : "Flush Selected Tables"}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-surface border-border">
+                            <CardHeader>
+                                <CardTitle className="text-sm">Local Fallback Queue Cleaner</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Hapus paksa 1 item queue berdasarkan filename (disk + DB) jika masih nyangkut setelah flush.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Filename queue</Label>
+                                    <Input
+                                        value={forceRemoveFilename}
+                                        onChange={(e) => setForceRemoveFilename(e.target.value)}
+                                        placeholder="contoh: prompt_09_grok_gen_20260315073113.mp4"
+                                        className="bg-background border-border text-xs"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div className="rounded-lg border border-border bg-background/40 px-3 py-2 flex items-center justify-between gap-3">
+                                        <Label className="text-xs text-foreground">Remove from disk</Label>
+                                        <Switch
+                                            checked={forceRemoveFlags.remove_from_disk}
+                                            onCheckedChange={(checked) => setForceRemoveFlags((prev) => ({ ...prev, remove_from_disk: checked }))}
+                                        />
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-background/40 px-3 py-2 flex items-center justify-between gap-3">
+                                        <Label className="text-xs text-foreground">Remove from DB</Label>
+                                        <Switch
+                                            checked={forceRemoveFlags.remove_from_db}
+                                            onCheckedChange={(checked) => setForceRemoveFlags((prev) => ({ ...prev, remove_from_db: checked }))}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                                    Gunakan hanya untuk kasus emergency item nyangkut. Ketik FLUSH untuk konfirmasi.
+                                </div>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <Input
+                                        value={forceRemoveConfirm}
+                                        onChange={(e) => setForceRemoveConfirm(e.target.value)}
+                                        placeholder="Type FLUSH to confirm"
+                                        className="bg-background border-border text-xs sm:max-w-xs"
+                                    />
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        disabled={
+                                            isForceRemoving
+                                            || !forceRemoveFilename.trim()
+                                            || forceRemoveConfirm.trim().toUpperCase() !== "FLUSH"
+                                            || (!forceRemoveFlags.remove_from_disk && !forceRemoveFlags.remove_from_db)
+                                        }
+                                        onClick={handleForceRemoveQueueItem}
+                                    >
+                                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                                        {isForceRemoving ? "Removing..." : "Force Remove by Filename"}
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
