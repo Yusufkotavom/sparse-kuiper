@@ -56,6 +56,17 @@ Dokumen ini merangkum perubahan penting yang membentuk ulang flow utama project 
   - branch cards ke review workspace, prompt builder, project assets, queue/runs, dan route lanjutan
 - Workspace lama `video/curation` dan `kdp/curation` tetap dipertahankan sebagai cabang spesifik, dengan positioning baru sebagai `Curation Workspace`.
 
+### Shared Hub Shell
+- Menambahkan shared component:
+  - `frontend/src/components/organisms/FlowHubShell.tsx`
+- `Ideation Hub` dan `Curation Hub` sekarang memakai shell yang sama untuk:
+  - mode switch
+  - project picker / project creation
+  - current context panel
+  - branch cards
+  - footer shortcut cards
+- Ini menjadi fondasi utama untuk memperluas hub ke generator atau workflow lain tanpa menduplikasi layout besar.
+
 ### Project Manager / Asset Flow
 - Menambahkan CTA yang lebih tegas ke:
   - Queue Builder

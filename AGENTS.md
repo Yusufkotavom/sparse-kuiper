@@ -27,6 +27,9 @@ dikerjakan di windows os
 - Untuk tahap review/selection, entry point utama sekarang adalah:
   - `Curation Hub` di `/curation`
 - `Curation Hub` dipakai sebagai jembatan review bersama sebelum user lanjut ke project assets, queue builder, runs, atau workspace review spesifik.
+- Shared shell untuk hub sekarang ada di:
+  - `frontend/src/components/organisms/FlowHubShell.tsx`
+- Jika mengembangkan hub baru, prioritaskan reuse shell ini daripada membuat layout hub baru dari nol.
 - Halaman project video sekarang juga menyediakan:
   - `Manual Upload` untuk fast-track dari file lokal ke project dan opsional langsung ke Queue Builder
 - Route frontend utama untuk publishing flow adalah:

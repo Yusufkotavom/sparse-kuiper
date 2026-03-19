@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowRight,
   Eye,
   FileText,
   FolderOpen,
@@ -14,22 +13,11 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { PageHeader } from "@/components/atoms/PageHeader";
-import { KpiCard } from "@/components/atoms/KpiCard";
-import { SegmentedTabs } from "@/components/atoms/SegmentedTabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FlowHubShell, type FlowHubBranch } from "@/components/organisms/FlowHubShell";
 import { getSupabaseClient } from "@/lib/supabase";
 import { kdpApi, videoApi } from "@/lib/api";
 
 type CurationMode = "video" | "image";
-
-type BranchCard = {
-  title: string;
-  description: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  accent: string;
-};
 
 function CurationHubContent() {
   const router = useRouter();
@@ -42,16 +30,12 @@ function CurationHubContent() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (queryMode === "video" || queryMode === "image") {
-      setMode(queryMode);
-    }
+    if (queryMode === "video" || queryMode === "image") setMode(queryMode);
   }, [queryMode]);
 
   useEffect(() => {
     const projectFromQuery = searchParams.get("project");
-    if (projectFromQuery) {
-      setSelectedProject(projectFromQuery);
-    }
+    if (projectFromQuery) setSelectedProject(projectFromQuery);
   }, [searchParams]);
 
   useEffect(() => {
@@ -101,7 +85,7 @@ function CurationHubContent() {
   const projectManagerHref = selectedProject ? `/project-manager/${encodeURIComponent(selectedProject)}` : "/project-manager";
   const runsHref = selectedProject ? `/runs?project=${encodeURIComponent(selectedProject)}` : "/runs";
 
-  const branches = useMemo<BranchCard[]>(() => {
+  const branches = useMemo<FlowHubBranch[]>(() => {
     if (mode === "video") {
       return [
         {
@@ -168,135 +152,64 @@ function CurationHubContent() {
   }, [curationWorkspaceHref, mode, projectManagerHref, promptBuilderHref, runsHref]);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-1 pb-6 sm:gap-6">
-      <PageHeader
-        title="Curation Hub"
-        description="Satu pintu review untuk video dan image sebelum lanjut ke asset management, queue, runs, atau cabang generator berikutnya."
-        badge={`${modeLabel} Review`}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard label="Video Projects" value={videoProjects.length} size="sm" />
-        <KpiCard label="Image Projects" value={imageProjects.length} size="sm" />
-        <KpiCard label="Review Mode" value={modeLabel} size="sm" />
-      </div>
-
-      <Card className="border-border bg-surface/70">
-        <CardHeader className="space-y-3">
-          <div className="space-y-2">
-            <CardTitle className="text-base sm:text-lg">Main Review Bridge</CardTitle>
-            <CardDescription>
-              Setelah ideation, user masuk ke pola review yang sama dulu sebelum masuk operasi atau generator lain.
-            </CardDescription>
-          </div>
-          <SegmentedTabs
-            className="w-full sm:w-fit"
-            value={mode}
-            onChange={(value) => setMode(value as CurationMode)}
-            items={[
-              { value: "video", label: "Video Review" },
-              { value: "image", label: "Image Review" },
-            ]}
-          />
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-            <p className="text-sm font-semibold text-foreground">Choose Project</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pilih project aktif dulu supaya semua shortcut berikutnya langsung relevan.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {loading ? (
-                <span className="text-xs text-muted-foreground">Loading projects...</span>
-              ) : currentProjects.length > 0 ? (
-                currentProjects.slice(0, 12).map((project) => (
-                  <button
-                    key={project}
-                    type="button"
-                    onClick={() => setSelectedProject(project)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      selectedProject === project
-                        ? "border-primary/50 bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {project}
-                  </button>
-                ))
-              ) : (
-                <span className="text-xs text-muted-foreground">Belum ada project untuk mode ini.</span>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Review Branches</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Project aktif: <span className="font-medium text-foreground">{selectedProject || "Belum dipilih"}</span>
-                </p>
-              </div>
-              <Link
-                href={curationWorkspaceHref}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Open Workspace
-              </Link>
-            </div>
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {branches.map((branch) => {
-                const Icon = branch.icon;
-                return (
-                  <Link
-                    key={branch.title}
-                    href={branch.href}
-                    className="group rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-card/90"
-                  >
-                    <div className={`inline-flex rounded-lg border px-2 py-2 ${branch.accent}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <p className="text-sm font-semibold text-foreground">{branch.title}</p>
-                      <p className="text-xs leading-5 text-muted-foreground">{branch.description}</p>
-                    </div>
-                    <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                      Open <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Link href={projectManagerHref} className="rounded-xl border border-border bg-background/70 p-4 hover:bg-background">
-              <div className="inline-flex rounded-lg border border-border px-2 py-2 text-muted-foreground">
-                <FolderOpen className="h-4 w-4" />
-              </div>
-              <p className="mt-3 text-sm font-semibold text-foreground">Project Manager</p>
-              <p className="mt-1 text-xs text-muted-foreground">Asset review cepat, metadata, queue, dan upload manual.</p>
-            </Link>
-            <Link href="/queue-builder" className="rounded-xl border border-border bg-background/70 p-4 hover:bg-background">
-              <div className="inline-flex rounded-lg border border-border px-2 py-2 text-muted-foreground">
-                <FileText className="h-4 w-4" />
-              </div>
-              <p className="mt-3 text-sm font-semibold text-foreground">Queue Builder</p>
-              <p className="mt-1 text-xs text-muted-foreground">Lanjut ke distribusi setelah review asset dan job config siap.</p>
-            </Link>
-            <Link href={runsHref} className="rounded-xl border border-border bg-background/70 p-4 hover:bg-background">
-              <div className="inline-flex rounded-lg border border-border px-2 py-2 text-muted-foreground">
-                <PlayCircle className="h-4 w-4" />
-              </div>
-              <p className="mt-3 text-sm font-semibold text-foreground">Runs</p>
-              <p className="mt-1 text-xs text-muted-foreground">Pantau proses aktif, scheduled, retry, dan riwayat hasil.</p>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <FlowHubShell
+      title="Curation Hub"
+      description="Satu pintu review untuk video dan image sebelum lanjut ke asset management, queue, runs, atau cabang generator berikutnya."
+      badge={`${modeLabel} Review`}
+      mode={mode}
+      modeItems={[
+        { value: "video", label: "Video Review" },
+        { value: "image", label: "Image Review" },
+      ]}
+      onModeChange={setMode}
+      videoProjectsCount={videoProjects.length}
+      imageProjectsCount={imageProjects.length}
+      modeMetricLabel="Review Mode"
+      modeMetricValue={modeLabel}
+      introTitle="Main Review Bridge"
+      introDescription="Setelah ideation, user masuk ke pola review yang sama dulu sebelum masuk operasi atau generator lain."
+      projectSectionTitle="Choose Project"
+      projectSectionDescription="Pilih project aktif dulu supaya semua shortcut berikutnya langsung relevan."
+      selectedProject={selectedProject}
+      currentProjects={currentProjects}
+      loading={loading}
+      onProjectDraftChange={setSelectedProject}
+      projectsEmptyText="Belum ada project untuk mode ini."
+      currentContextTitle="Review Branches"
+      currentContextDescription={
+        <>Project aktif: <span className="font-medium text-foreground">{selectedProject || "Belum dipilih"}</span></>
+      }
+      rightAction={(
+        <Link
+          href={curationWorkspaceHref}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Open Workspace
+        </Link>
+      )}
+      branches={branches}
+      footerLinks={[
+        {
+          title: "Project Manager",
+          description: "Asset review cepat, metadata, queue, dan upload manual.",
+          href: projectManagerHref,
+          icon: FolderOpen,
+        },
+        {
+          title: "Queue Builder",
+          description: "Lanjut ke distribusi setelah review asset dan job config siap.",
+          href: "/queue-builder",
+          icon: FileText,
+        },
+        {
+          title: "Runs",
+          description: "Pantau proses aktif, scheduled, retry, dan riwayat hasil.",
+          href: runsHref,
+          icon: PlayCircle,
+        },
+      ]}
+    />
   );
 }
 

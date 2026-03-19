@@ -389,10 +389,15 @@ def _build_simple_concat(
     ffmpeg_exe: str,
     input_paths: List[str],
     output_path: str,
+    trim_settings: Optional[Dict[str, dict]] = None,
 ) -> tuple[List[str], Optional[str]]:
     """
     Build simple concat command using concat demuxer.
     Fast path - copies streams without re-encoding.
+    
+    Note: If trim_settings are provided, this function will NOT apply them
+    because concat demuxer doesn't support trimming. The caller should use
+    complex concat instead.
     
     Returns:
         tuple: (command list, temp_file_path to clean up after execution)
@@ -658,11 +663,26 @@ def _build_complex_concat(
     """
     Build complex concat command using filter_complex.
     Handles transitions, trimming, scaling, and audio mixing.
+    
+    Validates: Requirements 6.4, 6.10
     """
     cmd = [ffmpeg_exe, "-y"]
     
-    # Add input files
+    # Add input files with trim settings if specified
     for path in input_paths:
+        # Apply trim settings using -ss (start) and -t (duration) flags
+        if trim_settings and path in trim_settings:
+            trim = trim_settings[path]
+            start = trim.get("start", 0)
+            end = trim.get("end")
+            
+            if end is not None:
+                duration = end - start
+                cmd += ["-ss", str(start), "-t", str(duration)]
+            else:
+                # Only start time specified
+                cmd += ["-ss", str(start)]
+        
         cmd += ["-i", path]
     
     # Add background music if specified
