@@ -25,7 +25,6 @@ from backend.routers.settings_schemas import (
     TelegramSettingsPayload,
     TelegramTestPayload,
     DatabaseFlushPayload,
-    LocalQueueForceRemovePayload,
 )
 from backend.services.telegram_notifier import send_telegram_message
 
@@ -570,33 +569,6 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
         deleted[key] = int(count or 0)
         total_deleted += deleted[key]
 
-    deleted_files = 0
-    failed_queue_files: list[str] = []
-    scanned_dirs: list[str] = []
-
-    def _clear_queue_files() -> tuple[int, list[str]]:
-        removed = 0
-        failed: list[str] = []
-        queue_dirs: list[Path] = [Path(UPLOAD_QUEUE_DIR)]
-        queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/queue"))
-        queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/*/queue"))
-        queue_dirs.extend(Path(PROJECTS_DIR).glob("*/queue"))
-
-        for qdir in queue_dirs:
-            if not qdir.exists() or not qdir.is_dir():
-                continue
-            scanned_dirs.append(str(qdir))
-            for fp in qdir.iterdir():
-                if not fp.is_file():
-                    continue
-                try:
-                    fp.unlink()
-                    removed += 1
-                except Exception as exc:
-                    logger.warning(f"Failed to remove queue file {fp}: {exc}")
-                    failed.append(str(fp))
-        return removed, failed
-
     try:
         if req.clear_upload_queue:
             _delete(db.query(UploadQueueItem), "upload_queue")
@@ -617,12 +589,6 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
             _delete(db.query(Account), "accounts")
 
         db.commit()
-
-        if req.clear_queue_files:
-            deleted_files, failed_queue_files = _clear_queue_files()
-            if req.clear_upload_queue:
-                _delete(db.query(UploadQueueItem), "upload_queue_post_file_cleanup")
-            db.commit()
     except Exception:
         db.rollback()
         raise
@@ -631,72 +597,9 @@ async def flush_database(req: DatabaseFlushPayload, db: Session = Depends(get_db
         "status": "success",
         "message": f"Database flush completed. Deleted {total_deleted} row(s).",
         "deleted": deleted,
-        "deleted_files": deleted_files,
-        "failed_queue_files": failed_queue_files,
-        "scanned_queue_dirs": scanned_dirs,
         "preserved": {
             "accounts": not req.clear_accounts,
             "prompt_templates": True,
             "non_prompt_app_settings": not req.clear_non_prompt_app_settings,
-            "queue_files": not req.clear_queue_files,
         },
-    }
-
-
-@router.post("/maintenance/queue/force-remove")
-async def force_remove_queue_item(req: LocalQueueForceRemovePayload, db: Session = Depends(get_db)):
-    confirm = (req.confirm_text or "").strip().upper()
-    if confirm != "FLUSH":
-        raise HTTPException(status_code=400, detail="Invalid confirmation text. Type FLUSH to continue.")
-
-    filename = (req.filename or "").strip()
-    if not filename:
-        raise HTTPException(status_code=400, detail="filename is required")
-
-    queue_dirs: list[Path] = [Path(UPLOAD_QUEUE_DIR)]
-    queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/queue"))
-    queue_dirs.extend(Path(VIDEO_PROJECTS_DIR).glob("*/*/queue"))
-    queue_dirs.extend(Path(PROJECTS_DIR).glob("*/queue"))
-
-    removed_files: list[str] = []
-    failed_files: list[str] = []
-    checked_paths: list[str] = []
-
-    if req.remove_from_disk:
-        for qdir in queue_dirs:
-            fp = qdir / filename
-            checked_paths.append(str(fp))
-            if not fp.exists() or not fp.is_file():
-                continue
-            try:
-                fp.unlink()
-                removed_files.append(str(fp))
-            except Exception as exc:
-                logger.warning(f"Failed to remove queue file {fp}: {exc}")
-                failed_files.append(str(fp))
-
-    deleted_rows = 0
-    deleted_metadata_rows = 0
-    if req.remove_from_db:
-        deleted_rows = (
-            db.query(UploadQueueItem)
-            .filter(UploadQueueItem.filename == filename)
-            .delete(synchronize_session=False)
-        )
-        deleted_metadata_rows = (
-            db.query(AssetMetadata)
-            .filter(AssetMetadata.filename == filename)
-            .delete(synchronize_session=False)
-        )
-        db.commit()
-
-    return {
-        "status": "success",
-        "message": f"Force remove completed for {filename}.",
-        "filename": filename,
-        "removed_files": removed_files,
-        "failed_files": failed_files,
-        "checked_paths": checked_paths,
-        "deleted_upload_queue_rows": int(deleted_rows or 0),
-        "deleted_asset_metadata_rows": int(deleted_metadata_rows or 0),
     }

@@ -108,17 +108,9 @@ class ConcatPreset(BaseModel):
 class DatabaseFlushPayload(BaseModel):
     confirm_text: str
     clear_upload_queue: bool = True
-    clear_queue_files: bool = True
     clear_generation_tasks: bool = True
     clear_realtime_events: bool = True
     clear_asset_metadata: bool = True
     clear_project_configs: bool = True
     clear_non_prompt_app_settings: bool = False
     clear_accounts: bool = False
-
-
-class LocalQueueForceRemovePayload(BaseModel):
-    confirm_text: str
-    filename: str
-    remove_from_disk: bool = True
-    remove_from_db: bool = True
