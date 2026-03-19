@@ -1,4 +1,6 @@
 """UploadQueueItem ORM Model — replaces upload_queue/status.json."""
+import json
+
 from sqlalchemy import Column, String, Text, Integer
 from sqlalchemy.sql import func
 from backend.core.database import Base
@@ -31,9 +33,35 @@ class UploadQueueItem(Base):
     file_path = Column(String, nullable=True)
     project_dir = Column(String, nullable=True)
 
+    @staticmethod
+    def _coerce_json_object(value, fallback: dict) -> dict:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+        return fallback
+
+    @staticmethod
+    def _coerce_json_array(value, fallback: list) -> list:
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except Exception:
+                pass
+        return fallback
+
     @property
     def platforms(self) -> dict:
-        return self._platform_statuses or {}
+        return self._coerce_json_object(self._platform_statuses, {})
 
     @platforms.setter
     def platforms(self, value: dict):
@@ -41,7 +69,7 @@ class UploadQueueItem(Base):
 
     @property
     def target_platforms(self) -> list:
-        return self._target_platforms or []
+        return self._coerce_json_array(self._target_platforms, [])
 
     @target_platforms.setter
     def target_platforms(self, value: list):
@@ -49,7 +77,7 @@ class UploadQueueItem(Base):
 
     @property
     def account_map(self) -> dict:
-        return self._account_map or {}
+        return self._coerce_json_object(self._account_map, {})
 
     @account_map.setter
     def account_map(self, value: dict):
@@ -57,7 +85,7 @@ class UploadQueueItem(Base):
 
     @property
     def options(self) -> dict:
-        return self._options or {}
+        return self._coerce_json_object(self._options, {})
 
     @options.setter
     def options(self, value: dict):
@@ -65,7 +93,7 @@ class UploadQueueItem(Base):
 
     @property
     def job_tags(self) -> list:
-        return self._job_tags or []
+        return self._coerce_json_array(self._job_tags, [])
 
     @job_tags.setter
     def job_tags(self, value: list):
