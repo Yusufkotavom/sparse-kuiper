@@ -12,14 +12,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { videoApi } from "@/lib/api";
-import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FlowStepWizard, type FlowStepItem } from "@/components/organisms/FlowStepWizard";
 
-const STEPS = [
-  { title: "Ideation", desc: "Brief + prompt direction", icon: Wand2, isRequired: true },
-  { title: "Generate", desc: "Produce draft assets", icon: Sparkles, isRequired: true },
-  { title: "Curation", desc: "Review raw/final quickly", icon: FolderOpen, isRequired: true },
-  { title: "Finalize", desc: "Mark ready for publish", icon: FolderOpen, isRequired: true },
+const STEPS: FlowStepItem[] = [
+  { id: "ideation", title: "Ideation", description: "Brief + prompt direction", icon: Wand2, required: true, completed: true },
+  { id: "generate", title: "Generate", description: "Produce draft assets", icon: Sparkles, required: true, completed: true },
+  { id: "curation", title: "Curation", description: "Review raw/final quickly", icon: FolderOpen, required: true },
+  { id: "finalize", title: "Finalize", description: "Mark ready for publish", icon: FolderOpen, required: true },
 ];
 
 export default function NewV2AssetsPage() {
@@ -104,25 +104,7 @@ export default function NewV2AssetsPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-4">
-        {STEPS.map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <Card key={step.title} className="border-border bg-surface/70">
-              <CardHeader className="pb-2">
-                <CardDescription>Step {index + 1}</CardDescription>
-                <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4" /> {step.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{step.desc}</p>
-                <div className="mt-2">
-                  <StatusBadge status={step.isRequired ? "active" : "pending"} />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <FlowStepWizard steps={STEPS} />
 
       <Card className="border-border bg-surface/70">
         <CardHeader>

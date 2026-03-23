@@ -18,6 +18,7 @@ export const NEWV2_TASKS: PlanTask[] = [
   { id: "nv2-006", title: "Integrate realtime metrics from runs API", priority: "P2", owner: "fullstack", status: "done", milestone: "monitoring" },
   { id: "nv2-007", title: "Asset flow action wiring to existing APIs", priority: "P2", owner: "fullstack", status: "done", milestone: "assets" },
   { id: "nv2-008", title: "Publisher job creation wiring to queue APIs", priority: "P2", owner: "fullstack", status: "done", milestone: "publisher" },
+  { id: "nv2-009", title: "Extract reusable stepper/wizard component for Assets & Publisher", priority: "P2", owner: "frontend", status: "done", milestone: "foundation" },
 ];
 
 export function summarizeTasks(tasks: PlanTask[]) {

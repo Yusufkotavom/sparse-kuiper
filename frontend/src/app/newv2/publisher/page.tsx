@@ -14,9 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FlowStepWizard, type FlowStepItem } from "@/components/organisms/FlowStepWizard";
 
 const PLATFORM_OPTIONS = ["youtube", "tiktok", "instagram", "facebook"] as const;
 type PlatformOption = typeof PLATFORM_OPTIONS[number];
+const PUBLISHER_STEPS: FlowStepItem[] = [
+  { id: "select-assets", title: "Select Assets", description: "Pick or add asset into queue", icon: Video, hint: "Required", required: true, completed: true },
+  { id: "platforms", title: "Platforms & Accounts", description: "Select target platform list", icon: UserRound, hint: "Required", required: true },
+  { id: "schedule", title: "Schedule", description: "Set run time for publish job", icon: CalendarClock, hint: "Optional" },
+  { id: "review", title: "Review & Create", description: "Save metadata + queue job config", icon: Send, hint: "Required", required: true },
+];
 
 export default function NewV2PublisherPage() {
   const [projectType, setProjectType] = useState<"video" | "kdp">("video");
@@ -138,27 +145,7 @@ export default function NewV2PublisherPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-4">
-        {[
-          { title: "Select Assets", icon: Video, hint: "Required" },
-          { title: "Platforms & Accounts", icon: UserRound, hint: "Required" },
-          { title: "Schedule", icon: CalendarClock, hint: "Optional" },
-          { title: "Review & Create", icon: Send, hint: "Required" },
-        ].map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <Card key={step.title} className="border-border bg-surface/70">
-              <CardHeader className="pb-2">
-                <CardDescription>Step {index + 1}</CardDescription>
-                <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4" /> {step.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">Field label: <span className="font-medium text-foreground">{step.hint}</span></p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <FlowStepWizard steps={PUBLISHER_STEPS} />
 
       <Card className="border-border bg-surface/70">
         <CardHeader>

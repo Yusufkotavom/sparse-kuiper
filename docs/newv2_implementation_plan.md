@@ -71,7 +71,7 @@ Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/
 
 ## P1
 - [x] Integrasi data realtime runs ke monitor V2.
-- [ ] Komponen reusable stepper/wizard.
+- [x] Komponen reusable stepper/wizard.
 - [ ] Snapshot UI before/after untuk review cepat.
 
 ## P2
