@@ -1,6 +1,5 @@
 import yt_dlp
 import os
-import json
 import uuid
 import asyncio
 from datetime import datetime
@@ -12,6 +11,8 @@ logger = logging.getLogger(__name__)
 # Base directories
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 VIDEO_PROJECTS_DIR = BASE_DIR / "video_projects"
+GLOBAL_PROFILES_DIR = BASE_DIR / "global_profiles"
+DEFAULT_YOUTUBE_COOKIES = GLOBAL_PROFILES_DIR / "youtube_cookies.txt"
 
 class ProjectLogger:
     def __init__(self, project_name: str):
@@ -42,7 +43,142 @@ class ProjectLogger:
     def error(self, msg):
         self._write(f"[ERROR] {msg}")
 
-def extract_playlist_info(url: str, platform: str, media_type: str = "all", limit: int = 50, min_views: int = 0, date_after: str = "") -> dict:
+
+def _is_youtube_url(url: str) -> bool:
+    lowered = (url or "").lower()
+    return "youtube.com" in lowered or "youtu.be" in lowered
+
+
+def _resolve_youtube_auth(
+    url: str,
+    cookies_path: str = "",
+    cookies_from_browser: str = "",
+) -> tuple[dict, str]:
+    """
+    Build yt-dlp auth-related options for YouTube requests.
+
+    Priority:
+    1) explicit request args
+    2) environment variables
+    3) default global_profiles/youtube_cookies.txt
+    """
+    if not _is_youtube_url(url):
+        return {}, "none"
+
+    opts: dict = {}
+
+    explicit_cookiefile = (cookies_path or "").strip()
+    explicit_browser = (cookies_from_browser or "").strip()
+    env_cookiefile = os.getenv("YTDLP_YOUTUBE_COOKIEFILE", "").strip()
+    env_browser = os.getenv("YTDLP_YOUTUBE_COOKIES_FROM_BROWSER", "").strip()
+
+    if explicit_cookiefile and os.path.exists(explicit_cookiefile):
+        opts["cookiefile"] = explicit_cookiefile
+        return opts, f"cookiefile:{explicit_cookiefile}"
+
+    if explicit_browser:
+        opts["cookiesfrombrowser"] = tuple(part.strip() for part in explicit_browser.split(":") if part.strip())
+        return opts, f"cookiesfrombrowser:{explicit_browser}"
+
+    if env_cookiefile and os.path.exists(env_cookiefile):
+        opts["cookiefile"] = env_cookiefile
+        return opts, f"cookiefile:{env_cookiefile}"
+
+    if env_browser:
+        opts["cookiesfrombrowser"] = tuple(part.strip() for part in env_browser.split(":") if part.strip())
+        return opts, f"cookiesfrombrowser:{env_browser}"
+
+    if DEFAULT_YOUTUBE_COOKIES.exists():
+        opts["cookiefile"] = str(DEFAULT_YOUTUBE_COOKIES)
+        return opts, f"cookiefile:{DEFAULT_YOUTUBE_COOKIES}"
+
+    return {}, "none"
+
+
+def _discover_session_cookiefiles() -> list[str]:
+    """
+    Discover cookies exported by account sessions:
+    data/sessions/<account_id>/cookies.txt (sorted newest first).
+    """
+    sessions_dir = BASE_DIR / "data" / "sessions"
+    if not sessions_dir.exists():
+        return []
+    found: list[Path] = []
+    for account_dir in sessions_dir.iterdir():
+        if account_dir.is_dir():
+            candidate = account_dir / "cookies.txt"
+            if candidate.exists():
+                found.append(candidate)
+    found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return [str(path) for path in found]
+
+
+def _youtube_auth_candidates(
+    url: str,
+    cookies_path: str = "",
+    cookies_from_browser: str = "",
+) -> list[tuple[dict, str]]:
+    """
+    Produce auth fallback chain for YouTube download calls.
+    """
+    if not _is_youtube_url(url):
+        return [({}, "none")]
+
+    candidates: list[tuple[dict, str]] = []
+    seen: set[str] = set()
+
+    primary_opts, primary_mode = _resolve_youtube_auth(url, cookies_path, cookies_from_browser)
+    if primary_opts:
+        candidates.append((primary_opts, primary_mode))
+        seen.add(primary_mode)
+
+    # Try any session cookies exported by login workers if primary path still fails.
+    for session_cookie in _discover_session_cookiefiles():
+        mode = f"cookiefile:{session_cookie}"
+        if mode in seen:
+            continue
+        candidates.append(({"cookiefile": session_cookie}, mode))
+        seen.add(mode)
+
+    # Last-resort browser extraction attempts (Windows-friendly default first).
+    for browser_name in ("chrome", "edge", "firefox"):
+        mode = f"cookiesfrombrowser:{browser_name}"
+        if mode in seen:
+            continue
+        candidates.append(({"cookiesfrombrowser": (browser_name,)}, mode))
+        seen.add(mode)
+
+    if not candidates:
+        candidates.append(({}, "none"))
+    return candidates
+
+
+def _is_youtube_bot_check_error(raw_message: str) -> bool:
+    msg = (raw_message or "").lower()
+    return "sign in to confirm you" in msg and "not a bot" in msg
+
+
+def _decorate_auth_error_message(raw_message: str) -> str:
+    hint = (
+        " YouTube meminta verifikasi bot. Solusi: "
+        "1) kirim cookies_path (Netscape cookies.txt), atau "
+        "2) set env YTDLP_YOUTUBE_COOKIES_FROM_BROWSER=chrome/firefox:profile, atau "
+        "3) simpan cookies di global_profiles/youtube_cookies.txt."
+    )
+    if _is_youtube_bot_check_error(raw_message):
+        return f"{raw_message}{hint}"
+    return raw_message
+
+def extract_playlist_info(
+    url: str,
+    platform: str,
+    media_type: str = "all",
+    limit: int = 50,
+    min_views: int = 0,
+    date_after: str = "",
+    cookies_path: str = "",
+    cookies_from_browser: str = "",
+) -> dict:
     """
     Extracts video URLs and titles from a playlist/channel via yt-dlp.
     Doesn't download the actual videos.
@@ -61,6 +197,10 @@ def extract_playlist_info(url: str, platform: str, media_type: str = "all", limi
         'playlistend': limit,
         'logger': ProjectLogger(project_name)
     }
+    auth_opts, auth_mode = _resolve_youtube_auth(url, cookies_path, cookies_from_browser)
+    if auth_opts:
+        ydl_opts.update(auth_opts)
+        logger.info(f"[yt-dlp] extract auth mode: {auth_mode}")
     
     if platform == "youtube":
         if media_type == "shorts":
@@ -122,10 +262,20 @@ def extract_playlist_info(url: str, platform: str, media_type: str = "all", limi
             }
     except Exception as e:
         logger.error(f"yt-dlp extraction error: {e}")
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": _decorate_auth_error_message(str(e))}
 
 
-async def download_video(url: str, project_name: str = "Downloads", download_thumbnail: bool = False, cookies_path: str = "", user_agent: str = "", po_token: str = "", use_mweb_client: bool = False, force_watch: bool = True) -> dict:
+async def download_video(
+    url: str,
+    project_name: str = "Downloads",
+    download_thumbnail: bool = False,
+    cookies_path: str = "",
+    user_agent: str = "",
+    po_token: str = "",
+    use_mweb_client: bool = False,
+    force_watch: bool = True,
+    cookies_from_browser: str = "",
+) -> dict:
     """
     Downloads a single video and its metadata JSON using yt-dlp into the video_projects folder.
     """
@@ -144,7 +294,7 @@ async def download_video(url: str, project_name: str = "Downloads", download_thu
         except Exception:
             pass
 
-    ydl_opts = {
+    base_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_tmpl,
         'writeinfojson': True,
@@ -152,10 +302,8 @@ async def download_video(url: str, project_name: str = "Downloads", download_thu
         'no_warnings': True,
         'logger': ProjectLogger(project_name)
     }
-    if cookies_path:
-        ydl_opts['cookiefile'] = cookies_path
     if user_agent:
-        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+        base_opts['http_headers'] = {'User-Agent': user_agent}
     _extractor_args = {}
     if use_mweb_client or po_token:
         _extractor_args['youtube'] = {}
@@ -164,28 +312,43 @@ async def download_video(url: str, project_name: str = "Downloads", download_thu
         if po_token:
             _extractor_args['youtube']['po_token'] = [po_token]
     if _extractor_args:
-        ydl_opts['extractor_args'] = _extractor_args
+        base_opts['extractor_args'] = _extractor_args
     
     if download_thumbnail:
-        ydl_opts['writethumbnail'] = True
-    
-    try:
+        base_opts['writethumbnail'] = True
+
+    auth_candidates = _youtube_auth_candidates(url, cookies_path, cookies_from_browser)
+    last_error: Exception | None = None
+
+    for auth_opts, auth_mode in auth_candidates:
+        ydl_opts = dict(base_opts)
+        if auth_opts:
+            ydl_opts.update(auth_opts)
+        logger.info(f"[yt-dlp] download auth mode: {auth_mode}")
+
         def do_download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
                 # If writing info json, yt-dlp replaces ext with info.json
                 return filename, info
-                
-        # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
-        filename, info = await asyncio.to_thread(do_download)
-        
-        return {
-            "success": True,
-            "title": info.get("title"),
-            "file": filename,
-            "message": "Download completed"
-        }
-    except Exception as e:
-        logger.error(f"yt-dlp download error: {e}")
-        return {"success": False, "message": str(e)}
+
+        try:
+            # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
+            filename, info = await asyncio.to_thread(do_download)
+            return {
+                "success": True,
+                "title": info.get("title"),
+                "file": filename,
+                "message": f"Download completed (auth: {auth_mode})"
+            }
+        except Exception as e:
+            last_error = e
+            logger.error(f"yt-dlp download error [{auth_mode}]: {e}")
+            # Continue fallback chain only for bot-check auth failures.
+            if _is_youtube_url(url) and _is_youtube_bot_check_error(str(e)):
+                continue
+            break
+
+    final_error = str(last_error) if last_error else "Unknown yt-dlp download error"
+    return {"success": False, "message": _decorate_auth_error_message(final_error)}
