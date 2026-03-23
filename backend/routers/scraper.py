@@ -17,6 +17,8 @@ class ExtractRequest(BaseModel):
     limit: int = 50
     min_views: int = 0
     date_after: str = ""
+    cookies_path: Optional[str] = ""
+    cookies_from_browser: Optional[str] = ""
 
 class DownloadRequest(BaseModel):
     url: str
@@ -26,6 +28,7 @@ class DownloadRequest(BaseModel):
     user_agent: Optional[str] = ""
     use_mweb_client: bool = False
     po_token: Optional[str] = ""
+    cookies_from_browser: Optional[str] = ""
     
 class BatchDownloadRequest(BaseModel):
     urls: List[str]
@@ -35,6 +38,7 @@ class BatchDownloadRequest(BaseModel):
     user_agent: Optional[str] = ""
     use_mweb_client: bool = False
     po_token: Optional[str] = ""
+    cookies_from_browser: Optional[str] = ""
 
 @router.post("/extract-info")
 async def extract_info(req: ExtractRequest):
@@ -53,7 +57,9 @@ async def extract_info(req: ExtractRequest):
         req.media_type, 
         req.limit,
         req.min_views,
-        req.date_after
+        req.date_after,
+        req.cookies_path or "",
+        req.cookies_from_browser or "",
     )
     
     if not result.get("success"):
@@ -96,7 +102,8 @@ async def download_single(req: DownloadRequest, background_tasks: BackgroundTask
             req.user_agent or "",
             req.po_token or "",
             req.use_mweb_client,
-            True
+            True,
+            req.cookies_from_browser or "",
         )
         if res.get("success"):
             logger.info(f"Successfully downloaded {req.url} to {res.get('file')}")
@@ -142,7 +149,8 @@ async def download_batch(req: BatchDownloadRequest, background_tasks: Background
                 req.user_agent or "",
                 req.po_token or "",
                 req.use_mweb_client,
-                True
+                True,
+                req.cookies_from_browser or "",
             )
             if res.get("success"):
                 logger.info(f"Successfully downloaded {url} to {res.get('file')}")
