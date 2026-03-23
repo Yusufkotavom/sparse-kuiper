@@ -1,6 +1,8 @@
 # CLAUDE.md — AI Coding Instructions for Nomad Hub
 
-> This file gives AI assistant (Claude, Gemini, etc.) all the context needed to work effectively on this project. Read this before making any changes.
+> ⚠️ **This file is superseded by `AGENTS.md`.** `AGENTS.md` contains the current project structure, routing model, conventions, skill usage rules, and development commands. Read `AGENTS.md` first. The content below is retained for reference but may be stale (e.g., route names, hub structure).
+
+> This file gives AI assistant (Claude, Gemini, etc.) all the context needed to work effectively on this project. For up-to-date guidance, read `AGENTS.md` instead.
 
 ## Project Overview
 

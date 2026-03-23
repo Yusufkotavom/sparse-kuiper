@@ -1,11 +1,35 @@
-dikerjakan di windows os
-
 # Repository Guidelines
+
+## Runtime Environment
+
+- **OS: Windows.** All local development and script execution runs on Windows.
+- Use `run_local.bat` to start backend + frontend in separate terminals.
+- Use `setup_local.bat` for first-time dependency setup (backend venv + frontend deps).
+- Use `kill_api.ps1` (PowerShell) to stop the backend process.
+- Avoid Unix-only shell syntax in scripts: no `&&` chaining in cmd.exe, no `export VAR=value`.
+- Path separators in `.bat`/PowerShell scripts: use `\`. In Python and Node config files: `/` is safe cross-platform.
+- When running backend commands manually, activate the venv first: `venv\Scripts\activate` (cmd) or `venv\Scripts\Activate.ps1` (PowerShell).
 
 ## Project Structure & Module Organization
 - `frontend/` contains the Next.js (App Router) UI:
-  - `frontend/src/app/` contains route pages (`<route>/page.tsx`)
+  - `frontend/src/app/` contains route pages (`<route>/page.tsx`). Current active routes:
+    - `ideation/` — Ideation Hub (primary entry for video + image creation)
+    - `curation/` — Curation Hub (primary entry for review + selection)
+    - `queue-builder/` — Queue Builder (primary publishing flow)
+    - `runs/` — Runs (operational job monitor)
+    - `video/` — Video workspace (branched from Ideation Hub)
+    - `kdp/` — KDP workspace (branched from Ideation Hub)
+    - `accounts/` — Social media account management
+    - `settings/` — App settings & integrations
+    - `scraper/` — Scraper projects
+    - `looper/` — Looper async jobs
+    - `logs/` — Observability logs
+    - `publisher/` — **LEGACY** redirect → `/queue-builder`
+    - `queue-manager/` — **LEGACY** redirect → `/queue-builder`
+    - `queue/` — **LEGACY** redirect → `/queue-builder`
+    - `jobs/` — **LEGACY** redirect → `/queue-builder`
   - `frontend/src/components/` contains shared UI components (Sidebar, wrappers, atoms, shadcn-style `ui/` primitives)
+  - `frontend/src/components/organisms/FlowHubShell.tsx` is the shared shell for hub pages (Ideation Hub, Curation Hub). Reuse for new hubs.
   - `frontend/src/components/queue-builder/QueueBuilderPage.tsx` is the current main implementation for the publishing flow UI
   - `frontend/src/lib/api.ts` centralizes all frontend API calls and uses `NEXT_PUBLIC_API_URL`
 - `backend/` contains the FastAPI server:
@@ -14,8 +38,10 @@ dikerjakan di windows os
   - `backend/models/` contains SQLAlchemy models
   - `backend/services/` contains background workers, platform uploaders, and shared integrations/notifiers (Playwright, yt-dlp, Groq helpers, Telegram notifier, dll.)
   - `backend/services/publisher_dispatcher.py` is the current lightweight DB polling dispatcher for queued/scheduled jobs
-- `docs/` contains project documentation (overview, deployment, architecture, API reference).
-- `skills/` dan `frontend/skills/` berisi skill internal project yang harus diprioritaskan saat task cocok dengan skill tersebut.
+- `docs/` contains project documentation (overview, deployment, architecture, API reference). See **Key Docs Reference** section for a per-domain map.
+- `skills/` dan `frontend/skills/` berisi skill internal project yang harus diprioritaskan saat task cocok dengan skill tersebut. See **Skill Usage Rules** for details.
+- `.kiro/specs/` contains feature specs (requirements, design, task checklists) for planned or in-progress features. Check here before implementing a feature that may already have a spec (e.g., `.kiro/specs/video-concat/`).
+- `internal_tools/` — internal utility scripts not part of the main application. Check before reimplementing similar utilities.
 - Runtime/data directories at repo root (usually gitignored): `projects/`, `video_projects/`, `upload_queue/`, `data/`, `chrome_profile/`, `global_profiles/`.
 
 ## Current Product Direction
@@ -40,6 +66,22 @@ dikerjakan di windows os
   - `docs/queue_job_worker_recommendations.md`
   - `docs/architecture.md`
 - Saat mengerjakan area queue/job, anggap Queue Builder sebagai flow utama, dan anggap endpoint/route `publisher` sebagai layer kompatibilitas yang masih hidup.
+
+## Key Docs Reference
+
+Read the relevant doc before starting work in that area:
+
+| Area | Read first |
+|---|---|
+| Architecture overview | `docs/architecture.md` |
+| Queue / job / publisher work | `docs/queue_job_worker_recommendations.md`, `CHANGELOG.md` |
+| UI component conventions | `docs/shadcn_first_ui.md` |
+| Progress / loading patterns | `docs/progress_loading_standard.md` |
+| UI domain separation | `docs/ui_code_separation_audit_2026_03.md` |
+| DB migration | `docs/architecture.md` (Catatan Arsitektur Terkini section) |
+| Deployment | `docs/deployment.md` |
+| API reference | `docs/api_reference.md` |
+| Skill combinations per task type | `docs/agent_skills.md` |
 
 ## Build, Test, and Development Commands
 - Backend (from repo root):
@@ -80,6 +122,11 @@ dikerjakan di windows os
   - Queue/publisher/job reliability: `skills/queue-workflow-reliability/SKILL.md`
   - Upload rollout: `skills/upload-feature-rollout/SKILL.md`
   - Telegram notification/integration: `skills/telegram-notification-integration/SKILL.md`
+- Untuk kombinasi skill yang direkomendasikan per jenis task (misalnya "add a new AI agent", "add video processing", "frontend-connected feature"), baca: `docs/agent_skills.md`
+- Perbedaan lokasi skill:
+  - `skills/*/SKILL.md` — full skill library (37 skills, semua domain).
+  - `frontend/skills/*/SKILL.md` — subset mirror untuk frontend (24 skills).
+  - Untuk task backend, video processing, migration, release, atau agent-bootstrap: gunakan `skills/` — skill tersebut tidak ada di `frontend/skills/`.
 - Jangan load semua skill sekaligus. Baca secukupnya yang relevan dengan task aktif agar konteks tetap ramping.
 - Jika menambah workflow reusable baru, pertimbangkan update skill terkait atau tambahkan skill baru agar pengetahuan project tidak hilang.
 
@@ -95,6 +142,12 @@ dikerjakan di windows os
 - Recent history follows a Conventional Commits pattern: `type(scope): message` (e.g., `chore(build): update config`). Keep it consistent.
 - Write concise, present-tense commit messages and keep commits scoped to one change.
 - PRs should include: a brief description, linked issues (if any), testing performed (commands), and screenshots for UI changes.
+
+Before committing non-trivial changes:
+1. Run the applicable smoke checks (see **Build, Test, and Development Commands**).
+2. Verify changes comply with AGENTS.md conventions using `skills/agent-policy-checker/SKILL.md`.
+3. For PR finalization, run the full quality gate in `skills/release-guardian/SKILL.md`.
+4. All PRs must satisfy the checklist in `skills/README.md` before merge.
 
 ## Security & Configuration Tips
 - Avoid committing secrets and local data:
