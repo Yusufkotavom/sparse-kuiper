@@ -16,9 +16,9 @@ services:
       - key: WORKER_MODE
         value: redis
       - key: REDIS_URL
-        sync: false
+        sync: "https://allowed-peacock-83516.upstash.io"
       - key: DATABASE_URL
-        sync: false
+        sync: "postgresql://sparse_kuiper_user:1VcMXz2CK5dqwR1VgOeAZBv8j8CFXyJP@dpg-d717bavdiees73er0mp0-a/sparse_kuiper_uyps"
       - key: DATABASE_POOL_SIZE
         value: "5"
       - key: DATABASE_MAX_OVERFLOW
@@ -60,9 +60,9 @@ services:
       - key: WORKER_MODE
         value: redis
       - key: REDIS_URL
-        sync: false
+        sync: "https://allowed-peacock-83516.upstash.io"
       - key: DATABASE_URL
-        sync: false
+        sync: "postgresql://sparse_kuiper_user:1VcMXz2CK5dqwR1VgOeAZBv8j8CFXyJP@dpg-d717bavdiees73er0mp0-a/sparse_kuiper_uyps"
       - key: DATABASE_POOL_SIZE
         value: "5"
       - key: DATABASE_MAX_OVERFLOW
@@ -88,18 +88,4 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
-        sync: false
-
-  - type: web
-    name: sparse-kuiper-frontend
-    runtime: node
-    rootDir: frontend
-    plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm run start -- -H 0.0.0.0 -p $PORT
-    autoDeploy: false
-    envVars:
-      - key: NODE_VERSION
-        value: 20.19.0
-      - key: NEXT_PUBLIC_API_URL
         sync: false
