@@ -35,7 +35,12 @@ def _lease_timeout_seconds() -> int:
 
 
 def _dispatcher_enabled() -> bool:
-    return os.environ.get("PUBLISHER_DISPATCHER_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+    explicit = os.environ.get("PUBLISHER_DISPATCHER_ENABLED")
+    if explicit is not None:
+        return explicit.strip().lower() not in {"0", "false", "no", "off"}
+    if os.environ.get("WORKER_MODE", "legacy").strip().lower() == "redis":
+        return False
+    return True
 
 
 def _build_platform_request(item: UploadQueueItem, platform: str) -> UploadRequest:

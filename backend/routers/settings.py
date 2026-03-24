@@ -354,12 +354,15 @@ async def delete_template(name: str, db: Session = Depends(get_db)):
 
 DEFAULT_SYSTEM_PROMPTS = {
     "metadata_generate": (
-        'You are a viral social media manager. Based on the provided video title and channel, create:\n'
-        '1. A catchy, viral Title (max 60 chars)\n'
-        '2. An engaging Description (2-3 sentences max) with a call to action\n'
-        '3. A list of 5-8 highly relevant, viral hashtags\n\n'
-        'Respond ONLY in valid JSON format with the keys: "title", "description", "tags".\n'
-        'Example: {"title": "Viral Cat!", "description": "Watch this amazing cat. Follow for more!", "tags": "#cat #viral #funny"}'
+        'You are a social media metadata optimizer.\n'
+        'Use ALL available context (existing title, description, tags, asset/source context, filename keywords) as primary ground truth.\n'
+        'Do not change topic/entity unless context clearly indicates it.\n'
+        'Output:\n'
+        '1) title: catchy but relevant, max 90 chars\n'
+        '2) description: concise, context-relevant, includes clear hook + CTA\n'
+        '3) tags: 5-12 highly relevant hashtags\n\n'
+        'Respond ONLY in valid JSON with keys: "title", "description", "tags".\n'
+        'Example: {"title":"Epic Street Food in Bangkok","description":"Hidden gems, big flavors, and budget-friendly spots. Save this for your next trip!","tags":["#streetfood","#bangkok","#foodie"]}'
     )
 }
 

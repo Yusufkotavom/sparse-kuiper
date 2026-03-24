@@ -8,11 +8,9 @@ import { KpiCard } from "@/components/atoms/KpiCard";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { NEWV2_TASKS, statusToBadge, summarizeTasks } from "@/components/newv2/planData";
 import { queueBuilderApi, type QueueBuilderJob } from "@/lib/api";
-import { summarizeNewV2UxKpis } from "@/lib/newv2Telemetry";
 
 type RunsMetrics = {
   queued: number;
@@ -32,7 +30,6 @@ export default function NewV2MonitoringPage() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
-  const [uxKpis, setUxKpis] = useState(() => summarizeNewV2UxKpis());
 
   const loadMetrics = async () => {
     setIsLoadingMetrics(true);
@@ -64,7 +61,6 @@ export default function NewV2MonitoringPage() {
 
       setMetrics(nextMetrics);
       setLastSyncAt(new Date().toISOString());
-      setUxKpis(summarizeNewV2UxKpis());
     } catch (err) {
       setMetricsError(err instanceof Error ? err.message : "Gagal memuat metrics runs.");
     } finally {
@@ -98,6 +94,30 @@ export default function NewV2MonitoringPage() {
         <CardHeader>
           <CardTitle className="text-base">Realtime Runs Metrics</CardTitle>
           <CardDescription>Data dari API queue/jobs dengan auto refresh setiap 15 detik.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-5">
+            <KpiCard label="Total Runs" value={metrics.total} size="sm" />
+            <KpiCard label="Queued" value={metrics.queued} size="sm" />
+            <KpiCard label="Scheduled" value={metrics.scheduled} size="sm" />
+            <KpiCard label="Running" value={metrics.running} size="sm" />
+            <KpiCard label="Failed" value={metrics.failed} size="sm" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Button variant="outline" size="sm" onClick={() => void loadMetrics()} disabled={isLoadingMetrics}>
+              Refresh Metrics
+            </Button>
+            <span>{isLoadingMetrics ? "Syncing..." : "Idle"}</span>
+            {lastSyncAt && <span>Last sync: {lastSyncAt}</span>}
+          </div>
+          {metricsError && <p className="text-xs text-destructive">{metricsError}</p>}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-surface/70">
+        <CardHeader>
+          <CardTitle className="text-base">Task Board</CardTitle>
+          <CardDescription>Status tugas plan: todo / in-progress / blocked / done.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-5">
