@@ -1,6 +1,5 @@
 import yt_dlp
 import os
-import json
 import uuid
 import asyncio
 from datetime import datetime
@@ -232,7 +231,7 @@ async def download_video(
         except Exception:
             pass
 
-    ydl_opts = {
+    base_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_tmpl,
         'writeinfojson': True,
@@ -245,7 +244,7 @@ async def download_video(
         ydl_opts.update(auth_opts)
         logger.info(f"[yt-dlp] download auth mode: {auth_mode}")
     if user_agent:
-        ydl_opts['http_headers'] = {'User-Agent': user_agent}
+        base_opts['http_headers'] = {'User-Agent': user_agent}
     _extractor_args = {}
     if use_mweb_client or po_token:
         _extractor_args['youtube'] = {}
@@ -254,12 +253,20 @@ async def download_video(
         if po_token:
             _extractor_args['youtube']['po_token'] = [po_token]
     if _extractor_args:
-        ydl_opts['extractor_args'] = _extractor_args
+        base_opts['extractor_args'] = _extractor_args
     
     if download_thumbnail:
-        ydl_opts['writethumbnail'] = True
-    
-    try:
+        base_opts['writethumbnail'] = True
+
+    auth_candidates = _youtube_auth_candidates(url, cookies_path, cookies_from_browser)
+    last_error: Exception | None = None
+
+    for auth_opts, auth_mode in auth_candidates:
+        ydl_opts = dict(base_opts)
+        if auth_opts:
+            ydl_opts.update(auth_opts)
+        logger.info(f"[yt-dlp] download auth mode: {auth_mode}")
+
         def do_download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
