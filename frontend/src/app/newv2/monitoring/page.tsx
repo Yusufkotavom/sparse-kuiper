@@ -80,8 +80,8 @@ export default function NewV2MonitoringPage() {
     <section className="space-y-4">
       <PageHeader
         title="NewV2 · Monitoring"
-        description="Monitoring board untuk checklist implementasi plan V2."
-        badge="Plan monitor"
+        description="Status ringkas runs dan health flow."
+        badge="Monitoring"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/newv2" className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>Back to NewV2</Link>
@@ -89,13 +89,6 @@ export default function NewV2MonitoringPage() {
           </div>
         }
       />
-
-      <div className="grid gap-3 sm:grid-cols-4">
-        <KpiCard label="Total" value={summary.total} size="sm" />
-        <KpiCard label="Done" value={summary.done} size="sm" />
-        <KpiCard label="In Progress" value={summary.inProgress} size="sm" />
-        <KpiCard label="Blocked" value={summary.blocked} size="sm" />
-      </div>
 
       <Card className="border-border bg-surface/70">
         <CardHeader>
@@ -126,18 +119,47 @@ export default function NewV2MonitoringPage() {
           <CardTitle className="text-base">Task Board</CardTitle>
           <CardDescription>Status tugas plan: todo / in-progress / blocked / done.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {NEWV2_TASKS.map((task) => (
-            <div key={task.id} className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2">
-              <div>
-                <p className="text-sm font-medium text-foreground">{task.title}</p>
-                <p className="text-xs text-muted-foreground">{task.id} · {task.priority} · {task.milestone}</p>
-              </div>
-              <StatusBadge status={statusToBadge(task.status)} />
-            </div>
-          ))}
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-5">
+            <KpiCard label="Total Runs" value={metrics.total} size="sm" />
+            <KpiCard label="Queued" value={metrics.queued} size="sm" />
+            <KpiCard label="Scheduled" value={metrics.scheduled} size="sm" />
+            <KpiCard label="Running" value={metrics.running} size="sm" />
+            <KpiCard label="Failed" value={metrics.failed} size="sm" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Button variant="outline" size="sm" onClick={() => void loadMetrics()} disabled={isLoadingMetrics}>
+              Refresh Metrics
+            </Button>
+            <span>{isLoadingMetrics ? "Syncing..." : "Idle"}</span>
+            {lastSyncAt && <span>Last sync: {lastSyncAt}</span>}
+          </div>
+          {metricsError && <p className="text-xs text-destructive">{metricsError}</p>}
         </CardContent>
       </Card>
+
+      <Collapsible defaultOpen={false} className="rounded-xl border border-border bg-surface/70 p-4">
+        <CollapsibleTrigger className="text-sm font-medium text-foreground">Tampilkan KPI UX & Task Detail</CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <KpiCard
+              label="Time to First Job (s)"
+              value={uxKpis.timeToFirstJobSeconds !== null ? uxKpis.timeToFirstJobSeconds : "—"}
+              size="sm"
+            />
+            <KpiCard label="Completion Rate (%)" value={uxKpis.completionRate} size="sm" />
+            <KpiCard label="Task Done" value={`${summary.done}/${summary.total}`} size="sm" />
+          </div>
+          <div className="space-y-2">
+            {NEWV2_TASKS.map((task) => (
+              <div key={task.id} className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2">
+                <p className="text-xs text-foreground">{task.title}</p>
+                <StatusBadge status={statusToBadge(task.status)} />
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </section>
   );
 }
