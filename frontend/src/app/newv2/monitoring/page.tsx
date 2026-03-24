@@ -1,21 +1,86 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/atoms/PageHeader";
 import { KpiCard } from "@/components/atoms/KpiCard";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NEWV2_TASKS, statusToBadge, summarizeTasks } from "@/components/newv2/planData";
+import { queueBuilderApi, type QueueBuilderJob } from "@/lib/api";
+import { summarizeNewV2UxKpis } from "@/lib/newv2Telemetry";
+
+type RunsMetrics = {
+  queued: number;
+  scheduled: number;
+  running: number;
+  failed: number;
+  total: number;
+};
+
+function normalizeStatus(status?: string | null) {
+  return (status || "").toLowerCase();
+}
 
 export default function NewV2MonitoringPage() {
   const summary = useMemo(() => summarizeTasks(NEWV2_TASKS), []);
+  const [metrics, setMetrics] = useState<RunsMetrics>({ queued: 0, scheduled: 0, running: 0, failed: 0, total: 0 });
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [uxKpis, setUxKpis] = useState(() => summarizeNewV2UxKpis());
+
+  const loadMetrics = async () => {
+    setIsLoadingMetrics(true);
+    setMetricsError(null);
+    try {
+      const [queueRes, jobsRes] = await Promise.all([queueBuilderApi.getQueue(), queueBuilderApi.getJobs()]);
+      const queueItems = queueRes.queue || [];
+      const jobs = jobsRes.jobs || [];
+      const combined = [...queueItems, ...jobs];
+
+      const nextMetrics = combined.reduce<RunsMetrics>(
+        (acc, item) => {
+          const status = normalizeStatus((item as QueueBuilderJob).worker_state || item.status);
+          acc.total += 1;
+
+          if (["running", "processing", "uploading"].includes(status)) {
+            acc.running += 1;
+          } else if (["scheduled"].includes(status)) {
+            acc.scheduled += 1;
+          } else if (["failed", "error", "completed_with_errors"].includes(status)) {
+            acc.failed += 1;
+          } else {
+            acc.queued += 1;
+          }
+          return acc;
+        },
+        { queued: 0, scheduled: 0, running: 0, failed: 0, total: 0 }
+      );
+
+      setMetrics(nextMetrics);
+      setLastSyncAt(new Date().toISOString());
+      setUxKpis(summarizeNewV2UxKpis());
+    } catch (err) {
+      setMetricsError(err instanceof Error ? err.message : "Gagal memuat metrics runs.");
+    } finally {
+      setIsLoadingMetrics(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadMetrics();
+    const timer = setInterval(() => {
+      void loadMetrics();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-4 px-1 pb-8">
+    <section className="space-y-4">
       <PageHeader
         title="NewV2 · Monitoring"
         description="Monitoring board untuk checklist implementasi plan V2."
@@ -34,6 +99,49 @@ export default function NewV2MonitoringPage() {
         <KpiCard label="In Progress" value={summary.inProgress} size="sm" />
         <KpiCard label="Blocked" value={summary.blocked} size="sm" />
       </div>
+
+      <Card className="border-border bg-surface/70">
+        <CardHeader>
+          <CardTitle className="text-base">Realtime Runs Metrics</CardTitle>
+          <CardDescription>Data dari API queue/jobs dengan auto refresh setiap 15 detik.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-5">
+            <KpiCard label="Total Runs" value={metrics.total} size="sm" />
+            <KpiCard label="Queued" value={metrics.queued} size="sm" />
+            <KpiCard label="Scheduled" value={metrics.scheduled} size="sm" />
+            <KpiCard label="Running" value={metrics.running} size="sm" />
+            <KpiCard label="Failed" value={metrics.failed} size="sm" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Button variant="outline" size="sm" onClick={() => void loadMetrics()} disabled={isLoadingMetrics}>
+              Refresh Metrics
+            </Button>
+            <span>{isLoadingMetrics ? "Syncing..." : "Idle"}</span>
+            {lastSyncAt && <span>Last sync: {lastSyncAt}</span>}
+          </div>
+          {metricsError && <p className="text-xs text-destructive">{metricsError}</p>}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-surface/70">
+        <CardHeader>
+          <CardTitle className="text-base">KPI UX (A/B + Telemetry)</CardTitle>
+          <CardDescription>Metrik local telemetry: time-to-first-job, click count, dan completion rate.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-4">
+          <KpiCard
+            label="Time to First Job (s)"
+            value={uxKpis.timeToFirstJobSeconds !== null ? uxKpis.timeToFirstJobSeconds : "—"}
+            size="sm"
+          />
+          <KpiCard label="Total Clicks" value={uxKpis.totalClicks} size="sm" />
+          <KpiCard label="Completed Jobs" value={uxKpis.completedJobCount} size="sm" />
+          <KpiCard label="Completion Rate (%)" value={uxKpis.completionRate} size="sm" />
+          <KpiCard label="Short Copy Conv (%)" value={uxKpis.shortConversion} size="sm" />
+          <KpiCard label="Long Copy Conv (%)" value={uxKpis.longConversion} size="sm" />
+        </CardContent>
+      </Card>
 
       <Card className="border-border bg-surface/70">
         <CardHeader>
