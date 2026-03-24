@@ -52,11 +52,6 @@ Isi di service backend sesuai kebutuhan fitur:
 ### 5) Hubungkan frontend (jika frontend di-host terpisah)
 - Set env frontend: `NEXT_PUBLIC_API_URL=https://<url-backend-render-anda>`
 
-### Troubleshooting Render
-- Jika log menampilkan `ModuleNotFoundError: No module named 'psycopg2'`, pastikan memakai versi kode terbaru.
-- Backend sudah dinormalisasi untuk memakai driver `psycopg` (`postgresql+psycopg://...`) agar kompatibel dengan dependency `psycopg` di `backend/requirements.txt`.
-- Setelah update kode, lakukan redeploy backend dari commit terbaru.
-
 ## Security Minimum
 - Jangan expose server tanpa auth/rate limit di internet publik.
 - Jangan commit `config.json`, OAuth secrets, database, session cookies.
