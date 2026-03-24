@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/atoms/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { queueBuilderApi } from "@/lib/api";
+import { queueBuilderApi, videoApi } from "@/lib/api";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +28,11 @@ const PUBLISHER_STEPS: FlowStepItem[] = [
 export default function NewV2PublisherPage() {
   const [projectType, setProjectType] = useState<"video" | "kdp">("video");
   const [relativePath, setRelativePath] = useState("");
+  const [videoProjects, setVideoProjects] = useState<string[]>([]);
+  const [selectedProject, setSelectedProject] = useState("");
+  const [selectedStage, setSelectedStage] = useState<"raw" | "final">("final");
+  const [projectFiles, setProjectFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState("");
   const [assetFilename, setAssetFilename] = useState("");
   const [queueAssets, setQueueAssets] = useState<string[]>([]);
   const [platforms, setPlatforms] = useState<PlatformOption[]>(["youtube"]);
@@ -39,6 +44,7 @@ export default function NewV2PublisherPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isLoadingProjectFiles, setIsLoadingProjectFiles] = useState(false);
 
   const canSubmit = useMemo(() => Boolean(assetFilename.trim()) && platforms.length > 0, [assetFilename, platforms.length]);
   const canAddToQueue = useMemo(() => Boolean(relativePath.trim()), [relativePath]);
@@ -63,6 +69,47 @@ export default function NewV2PublisherPage() {
   useEffect(() => {
     void loadQueueAssets();
   }, []);
+
+  const loadVideoProjects = async () => {
+    try {
+      const projects = await videoApi.listProjects();
+      setVideoProjects(projects);
+      if (!selectedProject && projects.length > 0) {
+        setSelectedProject(projects[0]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat project video.");
+    }
+  };
+
+  const loadProjectFiles = async (projectName: string) => {
+    if (!projectName) return;
+    setIsLoadingProjectFiles(true);
+    try {
+      const result = await videoApi.listProjectVideos(projectName);
+      const files = selectedStage === "final" ? result.final || [] : result.raw || [];
+      setProjectFiles(files);
+      if (files.length > 0) {
+        setSelectedFile(files[0]);
+      } else {
+        setSelectedFile("");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat file project.");
+    } finally {
+      setIsLoadingProjectFiles(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadVideoProjects();
+  }, []);
+
+  useEffect(() => {
+    if (projectType === "video" && selectedProject) {
+      void loadProjectFiles(selectedProject);
+    }
+  }, [projectType, selectedProject, selectedStage]);
 
   const togglePlatform = (platform: PlatformOption, checked: boolean) => {
     setPlatforms((prev) => {
@@ -131,6 +178,11 @@ export default function NewV2PublisherPage() {
     }
   };
 
+  const useSelectedProjectFile = () => {
+    if (!selectedProject || !selectedFile) return;
+    setRelativePath(`${selectedProject}/${selectedStage}/${selectedFile}`);
+  };
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-4 px-1 pb-8">
       <PageHeader
@@ -180,6 +232,47 @@ export default function NewV2PublisherPage() {
                 />
               </div>
             </div>
+            {projectType === "video" && (
+              <div className="mt-3 rounded-lg border border-border bg-background/70 p-3">
+                <p className="text-xs font-medium text-foreground">Quick Pick dari Video Project</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  <Input
+                    list="video-project-list"
+                    value={selectedProject}
+                    onChange={(event) => setSelectedProject(event.target.value)}
+                    placeholder="Pilih project video"
+                  />
+                  <datalist id="video-project-list">
+                    {videoProjects.map((project) => (
+                      <option key={project} value={project} />
+                    ))}
+                  </datalist>
+                  <Select value={selectedStage} onValueChange={(value) => setSelectedStage(value === "raw" ? "raw" : "final")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="final">final</SelectItem>
+                      <SelectItem value="raw">raw</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    list="video-file-list"
+                    value={selectedFile}
+                    onChange={(event) => setSelectedFile(event.target.value)}
+                    placeholder={isLoadingProjectFiles ? "Loading files..." : "Pilih file"}
+                  />
+                  <datalist id="video-file-list">
+                    {projectFiles.map((file) => (
+                      <option key={file} value={file} />
+                    ))}
+                  </datalist>
+                  <Button type="button" variant="outline" onClick={useSelectedProjectFile} disabled={!selectedProject || !selectedFile}>
+                    Use Selected Asset
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="mt-3">
               <Button type="button" variant="outline" onClick={handleAddToQueue} disabled={isSubmitting || !canAddToQueue}>
                 Add to Queue
