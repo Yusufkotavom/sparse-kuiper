@@ -3,7 +3,7 @@ services:
     name: sparse-kuiper-api
     runtime: python
     rootDir: .
-    plan: starter
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
     autoDeploy: false
