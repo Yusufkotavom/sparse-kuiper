@@ -17,6 +17,7 @@ from backend.core.realtime import publish_realtime_event
 from backend.models.upload_queue import UploadQueueItem
 from backend.models.asset_metadata import AssetMetadata
 from backend.routers.publisher_schemas import QueueAddRequest, QueueUpdateRequest, QueueConfigRequest, BulkQueueConfigRequest
+from backend.services.queue_bus import enqueue_publish_job
 
 
 router = APIRouter()
@@ -731,6 +732,7 @@ async def update_queue_config(request: QueueConfigRequest, db: Session = Depends
     sync_queue_job_state(item)
     if item.worker_state in {"queued", "scheduled"}:
         item.last_error = None
+        enqueue_publish_job(item.filename, scheduled_at=item.scheduled_at)
     _publish_queue_event(db, item, "updated")
     db.commit()
     return {"message": "Queue config updated"}
@@ -738,6 +740,7 @@ async def update_queue_config(request: QueueConfigRequest, db: Session = Depends
 
 @router.post("/queue/bulk-update-config")
 async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session = Depends(get_db)):
+    enqueued_count = 0
     try:
         start_dt = datetime.fromisoformat(request.schedule_start) if request.schedule_start else None
     except Exception:
@@ -790,6 +793,12 @@ async def bulk_update_queue_config(request: BulkQueueConfigRequest, db: Session 
         sync_queue_job_state(item)
         if item.worker_state in {"queued", "scheduled"}:
             item.last_error = None
+            if enqueue_publish_job(item.filename, scheduled_at=item.scheduled_at):
+                enqueued_count += 1
         _publish_queue_event(db, item, "updated")
     db.commit()
-    return {"message": "Bulk queue config updated", "count": len(request.filenames)}
+    return {
+        "message": "Bulk queue config updated",
+        "count": len(request.filenames),
+        "redis_enqueued": enqueued_count,
+    }
