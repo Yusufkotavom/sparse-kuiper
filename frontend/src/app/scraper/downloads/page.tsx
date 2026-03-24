@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSystemUi } from "@/components/system/SystemUiProvider";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, queueBuilderApi } from "@/lib/api";
 import {
     Loader2, ArrowLeft, Trash2, FolderOpen, Send, PlayCircle, Search, X,
     Pencil, Sparkles, Tag, AlignLeft, Type, CheckCircle2
@@ -141,26 +141,30 @@ function DownloadsContent() {
         if (!editFile) return;
         setIsGeneratingAI(true);
         try {
-            const prompt = `${metaEdit.title} - ${editFile.channel}`;
-            const res = await fetch(`${getApiBase()}/publisher/generate-metadata`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt }),
+            const relFile = `${activeProject}/raw_videos/${editFile.filename}`;
+            const contextualPrompt = [
+                `source: scraped download`,
+                `channel: ${editFile.channel || "-"}`,
+                `uploader: ${editFile.uploader || "-"}`,
+                `duration_seconds: ${editFile.duration || 0}`,
+                `view_count: ${editFile.view_count || 0}`,
+            ].join("\n");
+            const data = await queueBuilderApi.generateAssetMetadata({
+                project_type: "video",
+                file: relFile,
+                title: metaEdit.title || editFile.title || "",
+                description: metaEdit.description || editFile.description || "",
+                tags: metaEdit.tags || editFile.tags || "",
+                prompt: contextualPrompt,
             });
-            if (res.ok) {
-                const data = await res.json();
-                setMetaEdit({
-                    title: data.title || metaEdit.title,
-                    description: data.description || metaEdit.description,
-                    tags: data.tags || metaEdit.tags,
-                });
-            } else {
-                const err = await res.json();
-                toast.error(err.detail || "Failed to generate");
-            }
+            setMetaEdit({
+                title: data.title || metaEdit.title,
+                description: data.description || metaEdit.description,
+                tags: data.tags || metaEdit.tags,
+            });
         } catch (e) {
             console.error(e);
-            toast.error("Failed to connect to AI service");
+            toast.error("Failed to generate AI metadata");
         } finally {
             setIsGeneratingAI(false);
         }
