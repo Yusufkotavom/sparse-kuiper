@@ -694,6 +694,7 @@ export default function ProjectOverviewPage() {
                       title: latest.title || seed?.title || "",
                       description: latest.description || seed?.description || "",
                       tags: latest.tags || seed?.tags || "",
+                      prompt: `project: ${name}\nproject_type: ${projectType}\nasset_file: ${rel}`,
                     }).catch(() => ({ title: base, description: `Asset from project ${name}`, tags: projectType === "video" ? "#video" : "#image" }));
                     await queueBuilderApi.setAssetMetadata(projectType, rel, { title: gen.title, description: gen.description, tags: gen.tags });
                     updated++;
