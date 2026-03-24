@@ -95,69 +95,6 @@ def _resolve_youtube_auth(
     return {}, "none"
 
 
-def _discover_session_cookiefiles() -> list[str]:
-    """
-    Discover cookies exported by account sessions:
-    data/sessions/<account_id>/cookies.txt (sorted newest first).
-    """
-    sessions_dir = BASE_DIR / "data" / "sessions"
-    if not sessions_dir.exists():
-        return []
-    found: list[Path] = []
-    for account_dir in sessions_dir.iterdir():
-        if account_dir.is_dir():
-            candidate = account_dir / "cookies.txt"
-            if candidate.exists():
-                found.append(candidate)
-    found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return [str(path) for path in found]
-
-
-def _youtube_auth_candidates(
-    url: str,
-    cookies_path: str = "",
-    cookies_from_browser: str = "",
-) -> list[tuple[dict, str]]:
-    """
-    Produce auth fallback chain for YouTube download calls.
-    """
-    if not _is_youtube_url(url):
-        return [({}, "none")]
-
-    candidates: list[tuple[dict, str]] = []
-    seen: set[str] = set()
-
-    primary_opts, primary_mode = _resolve_youtube_auth(url, cookies_path, cookies_from_browser)
-    if primary_opts:
-        candidates.append((primary_opts, primary_mode))
-        seen.add(primary_mode)
-
-    # Try any session cookies exported by login workers if primary path still fails.
-    for session_cookie in _discover_session_cookiefiles():
-        mode = f"cookiefile:{session_cookie}"
-        if mode in seen:
-            continue
-        candidates.append(({"cookiefile": session_cookie}, mode))
-        seen.add(mode)
-
-    # Last-resort browser extraction attempts (Windows-friendly default first).
-    for browser_name in ("chrome", "edge", "firefox"):
-        mode = f"cookiesfrombrowser:{browser_name}"
-        if mode in seen:
-            continue
-        candidates.append(({"cookiesfrombrowser": (browser_name,)}, mode))
-        seen.add(mode)
-
-    if not candidates:
-        candidates.append(({}, "none"))
-    return candidates
-
-
-def _is_youtube_bot_check_error(raw_message: str) -> bool:
-    msg = (raw_message or "").lower()
-    return "sign in to confirm you" in msg and "not a bot" in msg
-
-
 def _decorate_auth_error_message(raw_message: str) -> str:
     hint = (
         " YouTube meminta verifikasi bot. Solusi: "
@@ -165,7 +102,7 @@ def _decorate_auth_error_message(raw_message: str) -> str:
         "2) set env YTDLP_YOUTUBE_COOKIES_FROM_BROWSER=chrome/firefox:profile, atau "
         "3) simpan cookies di global_profiles/youtube_cookies.txt."
     )
-    if _is_youtube_bot_check_error(raw_message):
+    if "Sign in to confirm you’re not a bot" in raw_message or "Sign in to confirm you're not a bot" in raw_message:
         return f"{raw_message}{hint}"
     return raw_message
 
@@ -302,6 +239,10 @@ async def download_video(
         'no_warnings': True,
         'logger': ProjectLogger(project_name)
     }
+    auth_opts, auth_mode = _resolve_youtube_auth(url, cookies_path, cookies_from_browser)
+    if auth_opts:
+        ydl_opts.update(auth_opts)
+        logger.info(f"[yt-dlp] download auth mode: {auth_mode}")
     if user_agent:
         base_opts['http_headers'] = {'User-Agent': user_agent}
     _extractor_args = {}
@@ -332,23 +273,16 @@ async def download_video(
                 filename = ydl.prepare_filename(info)
                 # If writing info json, yt-dlp replaces ext with info.json
                 return filename, info
-
-        try:
-            # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
-            filename, info = await asyncio.to_thread(do_download)
-            return {
-                "success": True,
-                "title": info.get("title"),
-                "file": filename,
-                "message": f"Download completed (auth: {auth_mode})"
-            }
-        except Exception as e:
-            last_error = e
-            logger.error(f"yt-dlp download error [{auth_mode}]: {e}")
-            # Continue fallback chain only for bot-check auth failures.
-            if _is_youtube_url(url) and _is_youtube_bot_check_error(str(e)):
-                continue
-            break
-
-    final_error = str(last_error) if last_error else "Unknown yt-dlp download error"
-    return {"success": False, "message": _decorate_auth_error_message(final_error)}
+                
+        # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
+        filename, info = await asyncio.to_thread(do_download)
+        
+        return {
+            "success": True,
+            "title": info.get("title"),
+            "file": filename,
+            "message": "Download completed"
+        }
+    except Exception as e:
+        logger.error(f"yt-dlp download error: {e}")
+        return {"success": False, "message": _decorate_auth_error_message(str(e))}

@@ -1,0 +1,91 @@
+services:
+  - type: web
+    name: sparse-kuiper-api
+    runtime: python
+    rootDir: .
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
+    autoDeploy: false
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: ENVIRONMENT
+        value: production
+      - key: WORKER_MODE
+        value: redis
+      - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_POOL_SIZE
+        value: "5"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "10"
+      - key: PUBLISHER_DISPATCHER_ENABLED
+        value: "0"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
+  - type: worker
+    name: sparse-kuiper-publisher-worker
+    runtime: python
+    rootDir: .
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m backend.services.publisher_redis_worker
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: ENVIRONMENT
+        value: production
+      - key: WORKER_MODE
+        value: redis
+      - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_POOL_SIZE
+        value: "5"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "10"
+      - key: PUBLISHER_JOB_LEASE_SECONDS
+        value: "300"
+      - key: REDIS_WORKER_BLOCK_SECONDS
+        value: "5"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

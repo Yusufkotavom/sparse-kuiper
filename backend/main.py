@@ -38,8 +38,11 @@ async def startup_event():
     """Initialize database tables and run idempotent migration bootstrap."""
     logger.info("[Startup] Initializing database...")
     from backend.core.database import create_all_tables, SessionLocal
+    from backend.core.secret_files import bootstrap_oauth_secret_files
     from backend.core.migrations import run_migrations
     from backend.services.publisher_dispatcher import start_publisher_dispatcher
+
+    bootstrap_oauth_secret_files()
 
     # 1. Create tables (idempotent — safe to run every time)
     create_all_tables()

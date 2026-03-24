@@ -15,7 +15,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL wajib diisi untuk integrasi Supabase.")
 if not DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
