@@ -115,6 +115,7 @@ export function LazyProjectManagerCard({
           title: latest.title || prefetchedMeta?.title || queueStatus?.metadata?.title || "",
           description: latest.description || prefetchedMeta?.description || queueStatus?.metadata?.description || "",
           tags: latest.tags || prefetchedMeta?.tags || queueStatus?.metadata?.tags || "",
+          prompt: `project: ${projectName}\nproject_type: ${projectType}\nasset_file: ${file}\nfilename: ${fileName}`,
         }).catch(() => ({ title: fileName.replace(/\.[^\.]+$/, ""), description: `Asset from project ${projectName}`, tags: "#content" }));
         await queueBuilderApi.setAssetMetadata(projectType, file, { title: gen.title, description: gen.description, tags: gen.tags });
       },

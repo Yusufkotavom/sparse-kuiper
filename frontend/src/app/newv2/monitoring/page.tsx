@@ -11,7 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import { NEWV2_TASKS, statusToBadge, summarizeTasks } from "@/components/newv2/planData";
 import { queueBuilderApi, type QueueBuilderJob } from "@/lib/api";
-import { summarizeNewV2UxKpis } from "@/lib/newv2Telemetry";
 
 type RunsMetrics = {
   queued: number;
@@ -31,7 +30,6 @@ export default function NewV2MonitoringPage() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
-  const [uxKpis, setUxKpis] = useState(() => summarizeNewV2UxKpis());
 
   const loadMetrics = async () => {
     setIsLoadingMetrics(true);
@@ -63,7 +61,6 @@ export default function NewV2MonitoringPage() {
 
       setMetrics(nextMetrics);
       setLastSyncAt(new Date().toISOString());
-      setUxKpis(summarizeNewV2UxKpis());
     } catch (err) {
       setMetricsError(err instanceof Error ? err.message : "Gagal memuat metrics runs.");
     } finally {
@@ -121,25 +118,6 @@ export default function NewV2MonitoringPage() {
             {lastSyncAt && <span>Last sync: {lastSyncAt}</span>}
           </div>
           {metricsError && <p className="text-xs text-destructive">{metricsError}</p>}
-        </CardContent>
-      </Card>
-
-      <Card className="border-border bg-surface/70">
-        <CardHeader>
-          <CardTitle className="text-base">KPI UX (A/B + Telemetry)</CardTitle>
-          <CardDescription>Metrik local telemetry: time-to-first-job, click count, dan completion rate.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-4">
-          <KpiCard
-            label="Time to First Job (s)"
-            value={uxKpis.timeToFirstJobSeconds !== null ? uxKpis.timeToFirstJobSeconds : "—"}
-            size="sm"
-          />
-          <KpiCard label="Total Clicks" value={uxKpis.totalClicks} size="sm" />
-          <KpiCard label="Completed Jobs" value={uxKpis.completedJobCount} size="sm" />
-          <KpiCard label="Completion Rate (%)" value={uxKpis.completionRate} size="sm" />
-          <KpiCard label="Short Copy Conv (%)" value={uxKpis.shortConversion} size="sm" />
-          <KpiCard label="Long Copy Conv (%)" value={uxKpis.longConversion} size="sm" />
         </CardContent>
       </Card>
 
