@@ -48,7 +48,7 @@ services:
     name: sparse-kuiper-publisher-worker
     runtime: python
     rootDir: .
-    plan: starter
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: python -m backend.services.publisher_redis_worker
     autoDeploy: false
