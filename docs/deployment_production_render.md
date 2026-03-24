@@ -12,21 +12,6 @@ Blueprint file yang dipakai:
 
 ---
 
-## Penting: Limit plan Render Free
-
-Jika kamu mendapat error:
-`Create background worker ... (service type is not available for this plan)`
-
-artinya akun/plan saat ini **tidak mendukung `type: worker`**.
-
-Solusi:
-1. **Naikkan plan** lalu gunakan `render-production.yaml` (redis-first, worker terpisah), atau
-2. Tetap di free tier dengan blueprint khusus **tanpa worker service**:
-   - `render-free-fullstack.yaml`
-   - mode queue: `WORKER_MODE=legacy` (dispatcher jalan di proses API)
-
----
-
 ## 1) Prasyarat
 
 Siapkan terlebih dulu:
@@ -54,9 +39,7 @@ Flow publish:
 ### Step A — Create Blueprint
 1. Render Dashboard -> **New +** -> **Blueprint**.
 2. Pilih repository.
-3. Pilih salah satu:
-   - `render-production.yaml` (butuh plan yang support worker service), atau
-   - `render-free-fullstack.yaml` (free-tier friendly, tanpa worker service).
+3. Pastikan file blueprint yang dipakai: `render-production.yaml`.
 4. Klik **Apply**.
 
 ### Step B — Set Environment Variables (wajib)
@@ -76,17 +59,10 @@ Di API:
 
 > Catatan: di mode ini dispatcher legacy sengaja dimatikan agar tidak double-processing.
 
-### Step C-alt — Mode free-tier (tanpa worker service)
-Jika pakai `render-free-fullstack.yaml`, gunakan:
-- `WORKER_MODE=legacy`
-- `PUBLISHER_DISPATCHER_ENABLED=1`
-
-Mode ini menjalankan queue dispatcher di proses API (lebih sederhana, tapi scale terbatas).
-
 ### Step D — Deploy order
 Disarankan urutan deploy:
 1. API
-2. Worker (skip jika mode free-tier)
+2. Worker
 3. Frontend
 
 ---

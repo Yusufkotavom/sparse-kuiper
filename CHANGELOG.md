@@ -2,6 +2,26 @@
 
 Dokumen ini merangkum perubahan penting yang membentuk ulang flow utama project menjadi lebih user friendly dan lebih dekat ke model queue/job yang durable.
 
+## 2026-03 NewV2 Navigation Refresh
+
+### Frontend UX / Routing
+- Menambahkan menu navigasi khusus NewV2 (tanpa mengubah sidebar global) via:
+  - `frontend/src/app/newv2/layout.tsx`
+  - `frontend/src/components/newv2/NewV2NavigationMenu.tsx`
+- Menu ini memudahkan perpindahan antar halaman:
+  - `Overview`
+  - `Assets`
+  - `Publisher`
+  - `Monitoring`
+
+### Implementasi Operasional
+- Menambahkan update implementasi terbaru di:
+  - `docs/newv2_implementation_plan.md`
+- Menegaskan langkah run/verifikasi NewV2:
+  - `cd frontend && npm install`
+  - `npm run dev`
+  - `npm run build`
+
 ## 2026-03 Queue Builder & Durable Job Flow
 
 ### Frontend UX / Routing

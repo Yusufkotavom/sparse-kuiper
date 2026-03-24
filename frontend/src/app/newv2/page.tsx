@@ -24,7 +24,7 @@ export default function NewV2Page() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-4 px-1 pb-8">
+    <section className="space-y-4">
       <PageHeader
         title="NewV2 Workspace"
         description="Playground UI baru tanpa menghapus flow lama. Fokus: pemisahan Asset Generator vs Publisher Ops + monitoring checklist implementasi."
