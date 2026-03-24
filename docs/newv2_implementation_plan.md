@@ -34,33 +34,33 @@ Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/
 
 ### Deliverables
 - [x] Sub-route `newv2/assets`.
-- [ ] Step ringkas: Ideation → Generate → Curation → Finalize.
+- [x] Step ringkas: Ideation → Generate → Curation → Finalize.
 - [x] Semua advanced opsi dipindahkan ke accordion/collapsible.
-- [ ] Empty/loading/error states konsisten.
+- [x] Empty/loading/error states konsisten.
 
 ### Exit Criteria
-- [ ] User bisa menyelesaikan 1 flow asset tanpa masuk route lama.
+- [x] User bisa menyelesaikan 1 flow asset tanpa masuk route lama.
 
 ## Milestone 3 — Publisher Ops V2 Skeleton (Week 3)
 
 ### Deliverables
 - [x] Sub-route `newv2/publisher`.
-- [ ] Wizard: Select Assets → Platforms/Accounts → Schedule → Review.
-- [ ] Label field jelas: Required / Optional / Advanced.
-- [ ] Monitoring card: queued / scheduled / running / failed.
+- [x] Wizard: Select Assets → Platforms/Accounts → Schedule → Review.
+- [x] Label field jelas: Required / Optional / Advanced.
+- [x] Monitoring card: queued / scheduled / running / failed.
 
 ### Exit Criteria
-- [ ] User bisa create job publish dari V2 skeleton.
+- [x] User bisa create job publish dari V2 skeleton.
 
 ## Milestone 4 — Monitoring & Stabilization (Week 4)
 
 ### Deliverables
 - [x] Halaman `newv2/monitoring` untuk checklist delivery plan.
-- [ ] Audit copy: deskripsi dipendekkan, CTA primer tunggal per panel.
-- [ ] Telemetry dasar (action success/fail).
+- [x] Audit copy: deskripsi dipendekkan, CTA primer tunggal per panel.
+- [x] Telemetry dasar (action success/fail).
 
 ### Exit Criteria
-- [ ] Checklist plan bisa dipakai PM/dev untuk tracking progres harian.
+- [x] Checklist plan bisa dipakai PM/dev untuk tracking progres harian.
 
 ## Backlog Todo (Prioritas)
 
@@ -70,8 +70,8 @@ Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/
 - [x] Definisikan status task: `todo`, `in_progress`, `blocked`, `done`.
 
 ## P1
-- [ ] Integrasi data realtime runs ke monitor V2.
-- [ ] Komponen reusable stepper/wizard.
+- [x] Integrasi data realtime runs ke monitor V2.
+- [x] Komponen reusable stepper/wizard.
 - [ ] Snapshot UI before/after untuk review cepat.
 
 ## P2
@@ -87,7 +87,7 @@ Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/
 
 ## Definition of Done (V2)
 
-- [ ] Route lama masih hidup.
-- [ ] V2 punya domain split yang tegas.
-- [ ] Advanced setting tidak mendominasi layar utama.
-- [ ] Checklist monitoring dipakai aktif oleh tim.
+- [x] Route lama masih hidup.
+- [x] V2 punya domain split yang tegas.
+- [x] Advanced setting tidak mendominasi layar utama.
+- [x] Checklist monitoring dipakai aktif oleh tim.
