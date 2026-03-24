@@ -1,21 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, CheckCircle2, Send, UserRound, Video } from "lucide-react";
 
 import { PageHeader } from "@/components/atoms/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { accountsApi, queueBuilderApi, videoApi, type Account } from "@/lib/api";
+import { queueBuilderApi, videoApi } from "@/lib/api";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FlowStepWizard, type FlowStepItem } from "@/components/organisms/FlowStepWizard";
-import { getNewV2CopyVariant, trackNewV2CopyExposure, trackNewV2PublisherAction } from "@/lib/newv2Telemetry";
 
 const PLATFORM_OPTIONS = ["youtube", "tiktok", "instagram", "facebook"] as const;
 type PlatformOption = typeof PLATFORM_OPTIONS[number];
@@ -37,8 +36,6 @@ export default function NewV2PublisherPage() {
   const [assetFilename, setAssetFilename] = useState("");
   const [queueAssets, setQueueAssets] = useState<string[]>([]);
   const [platforms, setPlatforms] = useState<PlatformOption[]>(["youtube"]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountMapDraft, setAccountMapDraft] = useState<Record<string, string>>({});
   const [schedule, setSchedule] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -48,55 +45,49 @@ export default function NewV2PublisherPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoadingProjectFiles, setIsLoadingProjectFiles] = useState(false);
-  const [copyVariant, setCopyVariant] = useState<"short" | "long">("short");
 
   const canSubmit = useMemo(() => Boolean(assetFilename.trim()) && platforms.length > 0, [assetFilename, platforms.length]);
   const canAddToQueue = useMemo(() => Boolean(relativePath.trim()), [relativePath]);
 
-  const loadQueueAssets = useCallback(async () => {
+  const loadQueueAssets = async () => {
     setIsLoadingAssets(true);
     setError(null);
     try {
       const result = await queueBuilderApi.getQueue();
       const filenames = (result.queue || []).map((item) => item.filename).filter(Boolean);
       setQueueAssets(filenames);
-      setAssetFilename((prev) => prev || filenames[0] || "");
+      if (!assetFilename && filenames.length > 0) {
+        setAssetFilename(filenames[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat queue assets.");
     } finally {
       setIsLoadingAssets(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     void loadQueueAssets();
-  }, [loadQueueAssets]);
+  }, []);
 
-  const loadVideoProjects = useCallback(async () => {
+  const loadVideoProjects = async () => {
     try {
       const projects = await videoApi.listProjects();
       setVideoProjects(projects);
-      setSelectedProject((prev) => prev || projects[0] || "");
+      if (!selectedProject && projects.length > 0) {
+        setSelectedProject(projects[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat project video.");
     }
-  }, []);
-
-  const loadAccounts = async () => {
-    try {
-      const result = await accountsApi.getAccounts();
-      setAccounts(result.accounts || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal memuat accounts.");
-    }
   };
 
-  const loadProjectFiles = useCallback(async (projectName: string, stage: "raw" | "final") => {
+  const loadProjectFiles = async (projectName: string) => {
     if (!projectName) return;
     setIsLoadingProjectFiles(true);
     try {
       const result = await videoApi.listProjectVideos(projectName);
-      const files = stage === "final" ? result.final || [] : result.raw || [];
+      const files = selectedStage === "final" ? result.final || [] : result.raw || [];
       setProjectFiles(files);
       if (files.length > 0) {
         setSelectedFile(files[0]);
@@ -108,21 +99,17 @@ export default function NewV2PublisherPage() {
     } finally {
       setIsLoadingProjectFiles(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     void loadVideoProjects();
-    void loadAccounts();
-    const variant = getNewV2CopyVariant();
-    setCopyVariant(variant);
-    trackNewV2CopyExposure(variant, "publisher");
-  }, [loadVideoProjects]);
+  }, []);
 
   useEffect(() => {
     if (projectType === "video" && selectedProject) {
-      void loadProjectFiles(selectedProject, selectedStage);
+      void loadProjectFiles(selectedProject);
     }
-  }, [projectType, selectedProject, selectedStage, loadProjectFiles]);
+  }, [projectType, selectedProject, selectedStage]);
 
   const togglePlatform = (platform: PlatformOption, checked: boolean) => {
     setPlatforms((prev) => {
@@ -135,7 +122,6 @@ export default function NewV2PublisherPage() {
 
   const handleCreateJob = async () => {
     if (!canSubmit) return;
-    trackNewV2PublisherAction();
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -154,21 +140,12 @@ export default function NewV2PublisherPage() {
         });
       }
 
-      const accountMap = platforms.reduce<Record<string, string>>((acc, platform) => {
-        const selected = accountMapDraft[platform]?.trim();
-        if (selected) {
-          acc[platform] = selected;
-        }
-        return acc;
-      }, {});
-
       await queueBuilderApi.updateQueueConfig({
         filename: assetFilename,
         platforms: [...platforms],
-        account_map: accountMap,
+        account_map: {},
         schedule: scheduleIso,
       });
-      trackNewV2PublisherAction({ completedJob: true, countClick: false, variant: copyVariant });
       setSuccess(`Job untuk "${assetFilename}" berhasil dibuat/diperbarui di queue.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membuat job publisher.");
@@ -177,13 +154,8 @@ export default function NewV2PublisherPage() {
     }
   };
 
-  const handleAccountChange = (platform: PlatformOption, value: string) => {
-    setAccountMapDraft((prev) => ({ ...prev, [platform]: value }));
-  };
-
   const handleAddToQueue = async () => {
     if (!canAddToQueue) return;
-    trackNewV2PublisherAction();
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -215,11 +187,7 @@ export default function NewV2PublisherPage() {
     <section className="space-y-4">
       <PageHeader
         title="NewV2 · Publisher Ops"
-        description={
-          copyVariant === "short"
-            ? "Add queue item, set platform/account, lalu create job."
-            : "Wizard publisher dengan wiring ke queue API untuk konfigurasi metadata, platform, dan schedule."
-        }
+        description="Wizard publisher dengan wiring ke queue API untuk konfigurasi metadata, platform, dan schedule."
         badge="Publisher v2"
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -352,33 +320,6 @@ export default function NewV2PublisherPage() {
                   <span className="capitalize">{platform}</span>
                 </label>
               ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Account map per platform (Optional)</Label>
-            <div className="grid gap-2 md:grid-cols-2">
-              {platforms.map((platform) => {
-                const options = accounts.filter((account) => account.platform.toLowerCase() === platform);
-                return (
-                  <div key={platform} className="space-y-1">
-                    <p className="text-xs font-medium capitalize text-foreground">{platform}</p>
-                    <Input
-                      list={`account-list-${platform}`}
-                      value={accountMapDraft[platform] || ""}
-                      onChange={(event) => handleAccountChange(platform, event.target.value)}
-                      placeholder={options.length > 0 ? "Pilih account id" : "Belum ada account"}
-                    />
-                    <datalist id={`account-list-${platform}`}>
-                      {options.map((account) => (
-                        <option key={`${platform}-${account.id || account.name}`} value={account.id || account.name}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-                );
-              })}
             </div>
           </div>
 

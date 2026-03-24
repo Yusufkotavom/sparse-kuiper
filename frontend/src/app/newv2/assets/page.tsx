@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FolderOpen, Sparkles, Wand2 } from "lucide-react";
 
 import { PageHeader } from "@/components/atoms/PageHeader";
@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { videoApi } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FlowStepWizard, type FlowStepItem } from "@/components/organisms/FlowStepWizard";
-import { getNewV2CopyVariant, trackNewV2AssetAction, trackNewV2CopyExposure } from "@/lib/newv2Telemetry";
 
 const STEPS: FlowStepItem[] = [
   { id: "ideation", title: "Ideation", description: "Brief + prompt direction", icon: Wand2, required: true, completed: true },
@@ -33,35 +32,32 @@ export default function NewV2AssetsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [copyVariant, setCopyVariant] = useState<"short" | "long">("short");
 
   const canUpload = useMemo(() => Boolean(projectName.trim()) && files.length > 0, [files.length, projectName]);
 
-  const loadProjects = useCallback(async () => {
+  const loadProjects = async () => {
     setIsLoadingProjects(true);
     setError(null);
     try {
       const result = await videoApi.listProjects();
       setProjects(result);
-      setProjectName((prev) => prev || result[0] || "");
+      if (!projectName && result.length > 0) {
+        setProjectName(result[0]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat daftar project.");
     } finally {
       setIsLoadingProjects(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     void loadProjects();
-    const variant = getNewV2CopyVariant();
-    setCopyVariant(variant);
-    trackNewV2CopyExposure(variant, "assets");
-  }, [loadProjects]);
+  }, []);
 
   const handleCreateProject = async () => {
     const name = newProjectName.trim();
     if (!name) return;
-    trackNewV2AssetAction();
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -80,7 +76,6 @@ export default function NewV2AssetsPage() {
 
   const handleUpload = async () => {
     if (!canUpload) return;
-    trackNewV2AssetAction();
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -99,11 +94,7 @@ export default function NewV2AssetsPage() {
     <section className="space-y-4">
       <PageHeader
         title="NewV2 · Asset Generator"
-        description={
-          copyVariant === "short"
-            ? "Create project, upload asset, lanjut publish."
-            : "Flow asset ringkas dengan wiring ke API project video: create project + upload file + lanjut ke Publisher Ops."
-        }
+        description="Flow asset ringkas dengan wiring ke API project video: create project + upload file + lanjut ke Publisher Ops."
         badge="Assets v2"
         actions={
           <div className="flex flex-wrap items-center gap-2">

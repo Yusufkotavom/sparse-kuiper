@@ -96,6 +96,7 @@ async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_
                     "title": data.get("title", "") or "",
                     "description": data.get("description", "") or "",
                     "tags": data.get("tags", "") or "",
+                    "context_lines": [],
                 }
             except Exception:
                 return {}
@@ -109,10 +110,27 @@ async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_
                 raw_cats = data.get("categories", []) or []
                 combined = list(dict.fromkeys(raw_tags + raw_cats))
                 tags_str = " ".join(f"#{str(t).replace(' ', '')}" for t in combined[:10])
+                info_tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+                info_cats = [str(c).strip() for c in raw_cats if str(c).strip()]
+                context_lines: list[str] = []
+                for key in ("uploader", "channel", "webpage_url", "original_url", "upload_date"):
+                    value = data.get(key)
+                    if value:
+                        context_lines.append(f"{key}: {value}")
+                if data.get("duration"):
+                    context_lines.append(f"duration_seconds: {data.get('duration')}")
+                if data.get("view_count"):
+                    context_lines.append(f"view_count: {data.get('view_count')}")
+                if info_cats:
+                    context_lines.append(f"categories: {', '.join(info_cats[:10])}")
+                if info_tags:
+                    context_lines.append(f"source_tags: {', '.join(info_tags[:20])}")
+
                 return {
                     "title": data.get("title", "") or "",
                     "description": (data.get("description") or "").strip()[:500],
                     "tags": tags_str,
+                    "context_lines": context_lines,
                 }
             except Exception:
                 return {}
@@ -191,6 +209,13 @@ async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_
                     seed_description = (sidecar.get("description") or "").strip()
                 if not seed_tags:
                     seed_tags = (sidecar.get("tags") or "").strip()
+                context_lines = sidecar.get("context_lines") or []
+                if isinstance(context_lines, list):
+                    cleaned = [str(line).strip() for line in context_lines if str(line).strip()]
+                    if cleaned:
+                        user_parts.append("Asset/source context:")
+                        for line in cleaned[:12]:
+                            user_parts.append(f"- {line}")
 
             if seed_title or seed_description or seed_tags:
                 user_parts.append("Existing metadata (may be incomplete, improve if needed):")
@@ -200,6 +225,12 @@ async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_
                     user_parts.append(f"- description: {seed_description}")
                 if seed_tags:
                     user_parts.append(f"- tags: {seed_tags}")
+
+            filename_keywords = [
+                seg for seg in re.split(r"[^a-zA-Z0-9]+", filename) if seg and not seg.isdigit()
+            ]
+            if filename_keywords:
+                user_parts.append(f"Filename keywords: {', '.join(filename_keywords[:8])}")
 
         if prompt_text:
             user_parts.append(f"Additional context:\n{prompt_text}")
@@ -218,7 +249,9 @@ async def generate_metadata(request: MetadataRequest, db: Session = Depends(get_
                         "You are to produce ONLY a compact JSON object with keys: "
                         'title (string), description (string), tags (array of strings). '
                         "Do not include code fences, markdown, or explanations.\n\n"
-                        "If existing metadata is provided, keep the intent but you may improve clarity and virality.\n\n"
+                        "If existing metadata is provided, treat it as primary context.\n"
+                        "Preserve core topic/entities/intent; improve wording, clarity, and virality without drifting topic.\n"
+                        "Use source context and filename keywords to stay relevant.\n\n"
                         + "\n\n".join(user_parts)
                     ),
                 },
