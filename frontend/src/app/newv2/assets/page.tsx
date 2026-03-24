@@ -91,7 +91,7 @@ export default function NewV2AssetsPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-4 px-1 pb-8">
+    <section className="space-y-4">
       <PageHeader
         title="NewV2 · Asset Generator"
         description="Flow asset ringkas dengan wiring ke API project video: create project + upload file + lanjut ke Publisher Ops."

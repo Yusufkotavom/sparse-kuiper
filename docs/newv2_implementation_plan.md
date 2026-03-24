@@ -2,6 +2,25 @@
 
 Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/newv2` **tanpa menghapus UI lama**.
 
+## Update Terkini (Navigasi NewV2)
+
+- Ditambahkan menu navigasi khusus NewV2 (tanpa mengubah sidebar global) untuk akses cepat:
+  - `/newv2`
+  - `/newv2/assets`
+  - `/newv2/publisher`
+  - `/newv2/monitoring`
+- Navigasi ini dipasang lewat `app/newv2/layout.tsx` sehingga konsisten tampil di semua halaman NewV2.
+
+### Implementasi yang Perlu Dijalankan
+
+1. Jalankan frontend:
+   - `cd frontend && npm install`
+   - `npm run dev`
+2. Verifikasi route NewV2:
+   - buka `/newv2`, `/newv2/assets`, `/newv2/publisher`, `/newv2/monitoring`
+3. Verifikasi build:
+   - `cd frontend && npm run build`
+
 ## Goal
 
 - Menyediakan flow baru yang lebih clean dan to-the-point.
