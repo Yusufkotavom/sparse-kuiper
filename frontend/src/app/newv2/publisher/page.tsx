@@ -184,7 +184,7 @@ export default function NewV2PublisherPage() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-4 px-1 pb-8">
+    <section className="space-y-4">
       <PageHeader
         title="NewV2 · Publisher Ops"
         description="Wizard publisher dengan wiring ke queue API untuk konfigurasi metadata, platform, dan schedule."
