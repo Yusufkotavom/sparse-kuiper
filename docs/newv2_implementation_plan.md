@@ -75,8 +75,8 @@ Dokumen ini adalah rencana implementasi praktis untuk membangun UI baru di `app/
 - [ ] Snapshot UI before/after untuk review cepat.
 
 ## P2
-- [ ] A/B test copy singkat vs copy panjang.
-- [ ] KPI UX: time-to-first-job, click count, completion rate.
+- [x] A/B test copy singkat vs copy panjang.
+- [x] KPI UX: time-to-first-job, click count, completion rate.
 
 ## Daily Execution Checklist
 
