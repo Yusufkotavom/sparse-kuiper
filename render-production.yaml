@@ -3,7 +3,7 @@ services:
     name: sparse-kuiper-api
     runtime: python
     rootDir: .
-    plan: starter
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
     autoDeploy: false
@@ -48,7 +48,7 @@ services:
     name: sparse-kuiper-publisher-worker
     runtime: python
     rootDir: .
-    plan: starter
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: python -m backend.services.publisher_redis_worker
     autoDeploy: false
@@ -88,18 +88,4 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
-        sync: false
-
-  - type: web
-    name: sparse-kuiper-frontend
-    runtime: node
-    rootDir: frontend
-    plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm run start -- -H 0.0.0.0 -p $PORT
-    autoDeploy: false
-    envVars:
-      - key: NODE_VERSION
-        value: 20.19.0
-      - key: NEXT_PUBLIC_API_URL
         sync: false

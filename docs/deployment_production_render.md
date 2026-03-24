@@ -12,21 +12,6 @@ Blueprint file yang dipakai:
 
 ---
 
-## Penting: Limit plan Render Free
-
-Jika kamu mendapat error:
-`Create background worker ... (service type is not available for this plan)`
-
-artinya akun/plan saat ini **tidak mendukung `type: worker`**.
-
-Solusi:
-1. **Naikkan plan** lalu gunakan `render-production.yaml` (redis-first, worker terpisah), atau
-2. Tetap di free tier dengan blueprint khusus **tanpa worker service**:
-   - `render-free-fullstack.yaml`
-   - mode queue: `WORKER_MODE=legacy` (dispatcher jalan di proses API)
-
----
-
 ## 1) Prasyarat
 
 Siapkan terlebih dulu:
@@ -54,9 +39,7 @@ Flow publish:
 ### Step A — Create Blueprint
 1. Render Dashboard -> **New +** -> **Blueprint**.
 2. Pilih repository.
-3. Pilih salah satu:
-   - `render-production.yaml` (butuh plan yang support worker service), atau
-   - `render-free-fullstack.yaml` (free-tier friendly, tanpa worker service).
+3. Pastikan file blueprint yang dipakai: `render-production.yaml`.
 4. Klik **Apply**.
 
 ### Step B — Set Environment Variables (wajib)
@@ -67,18 +50,6 @@ Set env berikut pada **API** dan **Worker**:
 Set env berikut pada **Frontend**:
 - `NEXT_PUBLIC_API_URL=https://<url-api-render-anda>`
 
-### Step B2 — Upload Secret Files (YouTube/Drive OAuth)
-Jika memakai Render Secret Files:
-1. Upload file OAuth client secret Google dengan ekstensi `.json` (bukan `.js`).
-2. Nama file yang didukung:
-   - `client_secrets.json`, atau
-   - `client_secret_*.apps.googleusercontent.com*.json`
-3. Saat startup, backend akan auto-copy file dari `/etc/secrets` ke:
-   - `config/youtube_secrets/`
-   - `config/google_secrets/`
-
-Jika file berakhiran `.js`, backend akan memberi warning dan file tidak dipakai sebagai OAuth secret.
-
 ### Step C — Set mode redis-first
 Di API + worker pastikan:
 - `WORKER_MODE=redis`
@@ -88,17 +59,10 @@ Di API:
 
 > Catatan: di mode ini dispatcher legacy sengaja dimatikan agar tidak double-processing.
 
-### Step C-alt — Mode free-tier (tanpa worker service)
-Jika pakai `render-free-fullstack.yaml`, gunakan:
-- `WORKER_MODE=legacy`
-- `PUBLISHER_DISPATCHER_ENABLED=1`
-
-Mode ini menjalankan queue dispatcher di proses API (lebih sederhana, tapi scale terbatas).
-
 ### Step D — Deploy order
 Disarankan urutan deploy:
 1. API
-2. Worker (skip jika mode free-tier)
+2. Worker
 3. Frontend
 
 ---
@@ -176,16 +140,3 @@ Tidak wajib. Bisa di Vercel/Cloudflare Pages, cukup set `NEXT_PUBLIC_API_URL`.
 
 ### Apakah Supabase wajib?
 Tidak wajib, asal PostgreSQL kompatibel dan `DATABASE_URL` valid.
-
-### Kenapa muncul error `failed to resolve host 'dpg-...-a'`?
-Itu biasanya karena `DATABASE_URL` memakai host internal Render yang tidak bisa di-resolve dari service kamu (region/network tidak cocok atau salah copy URL).
-
-Langkah fix:
-1. Buka Render Postgres -> **Connect**.
-2. Copy ulang **External Database URL** (disarankan untuk kasus ini), jangan ketik manual.
-3. Update env `DATABASE_URL` di service API/worker.
-4. Redeploy.
-
-Checklist cepat:
-- pastikan URL host berbentuk FQDN (punya domain, bukan hanya `dpg-...-a`).
-- pastikan username/password terbaru (kalau credential sempat terekspos, rotate dulu).
