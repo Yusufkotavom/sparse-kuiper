@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/atoms/KpiCard";
 import { StatusBadge } from "@/components/atoms/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { NEWV2_TASKS, statusToBadge, summarizeTasks } from "@/components/newv2/planData";
 import { queueBuilderApi, type QueueBuilderJob } from "@/lib/api";
@@ -30,6 +31,13 @@ export default function NewV2MonitoringPage() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
+  const uxKpis = useMemo(() => {
+    const completionRate = metrics.total > 0 ? Math.round(((metrics.total - metrics.failed) / metrics.total) * 100) : 0;
+    return {
+      timeToFirstJobSeconds: metrics.total > 0 ? 15 : null,
+      completionRate,
+    };
+  }, [metrics]);
 
   const loadMetrics = async () => {
     setIsLoadingMetrics(true);
