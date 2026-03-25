@@ -231,18 +231,16 @@ async def download_video(
         except Exception:
             pass
 
+    project_logger = ProjectLogger(project_name)
+
     base_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_tmpl,
         'writeinfojson': True,
         'quiet': False,
         'no_warnings': True,
-        'logger': ProjectLogger(project_name)
+        'logger': project_logger
     }
-    auth_opts, auth_mode = _resolve_youtube_auth(url, cookies_path, cookies_from_browser)
-    if auth_opts:
-        ydl_opts.update(auth_opts)
-        logger.info(f"[yt-dlp] download auth mode: {auth_mode}")
     if user_agent:
         base_opts['http_headers'] = {'User-Agent': user_agent}
     _extractor_args = {}
@@ -274,15 +272,19 @@ async def download_video(
                 # If writing info json, yt-dlp replaces ext with info.json
                 return filename, info
                 
-        # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
-        filename, info = await asyncio.to_thread(do_download)
-        
-        return {
-            "success": True,
-            "title": info.get("title"),
-            "file": filename,
-            "message": "Download completed"
-        }
-    except Exception as e:
-        logger.error(f"yt-dlp download error: {e}")
-        return {"success": False, "message": _decorate_auth_error_message(str(e))}
+        try:
+            # Run blocking yt-dlp in a background thread to prevent blocking FastAPI
+            filename, info = await asyncio.to_thread(do_download)
+            return {
+                "success": True,
+                "title": info.get("title"),
+                "file": filename,
+                "message": "Download completed"
+            }
+        except Exception as e:
+            last_error = e
+            logger.error(f"yt-dlp download error ({auth_mode}): {e}")
+
+    if last_error is not None:
+        return {"success": False, "message": _decorate_auth_error_message(str(last_error))}
+    return {"success": False, "message": "Download gagal: tidak ada mode autentikasi yang dapat digunakan."}
